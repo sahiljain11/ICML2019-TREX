@@ -26,6 +26,8 @@ def run_pase_on_file(user_name: str, time_interval: float):
     WAV_PATH = path_helper(f'{user_name}.wav')
     ANN_PATH = path_helper(f'{user_name}_annotations.json')
 
+    # Compute the length of the entire audio segment both as a tensor and in
+    # the number of seconds
     y, sr = librosa.load(WAV_PATH, sr=48000)
     SECONDS = librosa.get_duration(y=y, sr=sr)
     y = torch.tensor(y).view((1, 1, -1))
@@ -37,41 +39,46 @@ def run_pase_on_file(user_name: str, time_interval: float):
 
     NUM_FRAMES = y.shape[2]
 
+    # Load in the annotations file
     annotations = json.load(open(ANN_PATH, "r"))
     start_anns = [None] * len(annotations.keys())
 
     data = []
     labels = []
 
+    # Loop thorugh each yes, no, etc in the json annotations
     for key in annotations.keys():
         start = annotations[key][0]
         end   = annotations[key][1]
         word  = annotations[key][2]
 
+        # See if a word is 'yes' or 'no'
         for i in range(0, len(labels_array)):
             if word.lstrip().rstrip() == labels_array[i]:
                 j = start
                 while j + time_interval <= (end + 0.01):
             
-                    # calculate subset of dataset
+                    # Compute intervals of yes/no at the time size passed under
+                    # arguments. Proportional calculations are below
                     s_proportion = j / SECONDS
                     e_proportion = (j + time_interval) / SECONDS
                     s_index = int(NUM_FRAMES * s_proportion)
                     e_index = int(NUM_FRAMES * e_proportion)
                     subset = y[:,:,s_index:e_index]
 
-                    #print("-" * 40)
-                    #print(f"Shape of subset: {subset.shape}")
+                    # Conduct a forward pass through the existing PASE network
                     result = pase(subset)
-                    #print(f"{result.shape}: {i}")
-                    #print("-" * 40)
 
+                    # Append the new sub annotation to the overall dataset as
+                    # well as the label
                     data.append(result)
                     labels.append(i)
 
                     j += time_interval
                 break
 
+    # Create the data such that it's a numpy array for easier processing
+    # of PCA later
     data = [d.detach().numpy() for d in data]
     data_len = len(data)
     data = np.array(data)
@@ -106,6 +113,8 @@ def pca_and_plot(dataset: list, labels: list, dim: int,
         no.append([])
         yes.append([])
 
+    # Add x, y, z, and index coordinates to a 2 dimensional array to properly
+    # create all of the scatter points
     for i in range(0, pca_dim.shape[0]):
         label_idx = int(labels[i])
         if label_idx == 0:
@@ -121,6 +130,8 @@ def pca_and_plot(dataset: list, labels: list, dim: int,
                 yes[2].append(pca_dim[i,2])
             yes[3].append(i)
 
+    # Create either 3D scatter points or 2D scatter points depending on the
+    # argument input
     if dim == 3:
         trace_input = go.Scatter3d(
             x=no[0],
@@ -172,6 +183,7 @@ def pca_and_plot(dataset: list, labels: list, dim: int,
         )
         plotting_data.append(trace_input)
 
+    # Establish the layout of the image
     layout = go.Layout(
         margin = {'l': 0, 'r': 0, 'b': 0, 't': 0},
         showlegend=True,
@@ -182,6 +194,7 @@ def pca_and_plot(dataset: list, labels: list, dim: int,
         height = 1000
     )
 
+    # Create and save the figure
     plot_figure = go.Figure(data=plotting_data, layout=layout)
     plot_figure.write_image(f'{dim}dscatter_{time_interval}_{key}.png')
 
