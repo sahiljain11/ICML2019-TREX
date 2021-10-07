@@ -7,6 +7,7 @@ import os
 import torch
 import json
 import numpy as np
+from numpy import linalg as LA
 import argparse
 
 global pase, labels
@@ -22,7 +23,7 @@ def path_helper(path_string: str) -> str:
 """
     Returns the output of the pase model on a given trajectory
 """
-def run_pase_on_file(user_name: str, time_interval: float):
+def run_pase_on_file(user_name: str):
     WAV_PATH = path_helper(f'{user_name}.wav')
     ANN_PATH = path_helper(f'{user_name}_annotations.json')
 
@@ -32,10 +33,10 @@ def run_pase_on_file(user_name: str, time_interval: float):
     SECONDS = librosa.get_duration(y=y, sr=sr)
     y = torch.tensor(y).view((1, 1, -1))
 
-    print(f"Shape of entire audio before pase: {y.shape}")
+    #print(f"Shape of entire audio before pase: {y.shape}")
     # total size will be (1, 256, 9409), which are 20484 frames of 256 dims each
-    total = pase(y, device="cpu")
-    print(f"Shape of entire audio after pase:  {total.shape}")
+    #total = pase(y, device="cpu")
+    #print(f"Shape of entire audio after pase:  {total.shape}")
 
     NUM_FRAMES = y.shape[2]
 
@@ -51,36 +52,33 @@ def run_pase_on_file(user_name: str, time_interval: float):
         start = annotations[key][0]
         end   = annotations[key][1]
         word  = annotations[key][2]
+        confidence  = annotations[key][3]
 
         # See if a word is 'yes' or 'no'
         for i in range(0, len(labels_array)):
-            if word.lstrip().rstrip() == labels_array[i]:
-                j = start
-                while j + time_interval <= (end + 0.01):
-            
-                    # Compute intervals of yes/no at the time size passed under
-                    # arguments. Proportional calculations are below
-                    s_proportion = j / SECONDS
-                    e_proportion = (j + time_interval) / SECONDS
-                    s_index = int(NUM_FRAMES * s_proportion)
-                    e_index = int(NUM_FRAMES * e_proportion)
-                    subset = y[:,:,s_index:e_index]
+            if word.lstrip().rstrip() == labels_array[i] and confidence >= 0.8:
+                # Compute intervals of yes/no at the time size passed under
+                # arguments. Proportional calculations are below
+                s_proportion = start / SECONDS
+                e_proportion = end   / SECONDS
+                s_index = int(NUM_FRAMES * s_proportion)
+                e_index = int(NUM_FRAMES * e_proportion)
 
-                    # Conduct a forward pass through the existing PASE network
-                    result = pase(subset)
+                subset = torch.zeros((1, 256, e_index - s_index))
+                subset = y[:,:,s_index:e_index]
 
-                    # Append the new sub annotation to the overall dataset as
-                    # well as the label
-                    data.append(result)
-                    labels.append(i)
+                # Conduct a forward pass through the existing PASE network
+                result = pase(subset)[:,:,-1]
 
-                    j += time_interval
+                data.append(result)
+                labels.append(i)
+
                 break
 
     # Create the data such that it's a numpy array for easier processing
     # of PCA later
-    data = [d.detach().numpy() for d in data]
     data_len = len(data)
+    data = [d.detach().numpy() for d in data]
     data = np.array(data)
     data = data.reshape((data_len, -1))
     labels  = [np.array(l) for l in labels]
@@ -89,8 +87,27 @@ def run_pase_on_file(user_name: str, time_interval: float):
     print(f"Total of {len(data)} items in the dataset")
     return (data, labels)
 
-def pca_and_plot(dataset: list, labels: list, dim: int,
-                 time_interval: float, key: str) -> None:
+def calculate_cosine_distance(dataset: list, labels: list):
+    print(len(dataset))
+    print(len(labels))
+    print(type(dataset))
+    f = open("cosines.csv", "w")
+
+    for i in range(0, len(labels)):
+        for j in range(i + 1, len(labels)):
+            dot_product = dataset[i].dot(dataset[j]) / (LA.norm(dataset[i]) * LA.norm(dataset[j]))
+
+            if labels[i] == labels[j] and labels[i] == 0:
+                f.write(f'no-no,{dot_product}\n')
+            elif labels[i] == labels[j] and labels[i] == 1:
+                f.write(f'yes-yes,{dot_product}\n')
+            elif labels[i] != labels[j]:
+                f.write(f'yes-no,{dot_product}\n')
+
+    f.close()
+    return
+
+def pca_and_plot(dataset: list, labels: list, dim: int, key: str, tsne: bool) -> None:
 
     assert dim == 2 or dim == 3
 
@@ -99,8 +116,22 @@ def pca_and_plot(dataset: list, labels: list, dim: int,
     import plotly
     import plotly.graph_objs as go
 
-    if dim == 3:
+    if dim == 3 and tsne:
+        pca_dim = TSNE(n_components=3,
+                       random_state=0,
+                       perplexity=0,
+                       learning_rate=0,
+                       n_iter=250
+                       ).fit_transform(dataset)[:,:3]
+    elif dim == 3 and not tsne:
         pca_dim = PCA(random_state=0).fit_transform(dataset)[:,:3]
+    elif dim == 2 and tsne:
+        pca_dim = TSNE(n_components=2,
+                       random_state=0,
+                       perplexity=0,
+                       learning_rate=0,
+                       n_iter=250
+                       ).fit_transform(dataset)[:,:2]
     else:
         pca_dim = PCA(random_state=0).fit_transform(dataset)[:,:2]
 
@@ -142,7 +173,7 @@ def pca_and_plot(dataset: list, labels: list, dim: int,
             textposition="top center",
             textfont_size=20,
             mode='markers+text',
-            marker={'size': 10, 'opacity': 1, 'color': 'blue'}
+            marker={'size': 10, 'opacity': 1, 'color': '#F907FC',}
         )
         plotting_data.append(trace_input)
 
@@ -155,7 +186,7 @@ def pca_and_plot(dataset: list, labels: list, dim: int,
             textposition="top center",
             textfont_size=20,
             mode='markers+text',
-            marker={'size': 10, 'opacity': 1, 'color': 'green',}
+            marker={'size': 10, 'opacity': 1, 'color': '#05D6D9'}
         )
         plotting_data.append(trace_input)
     else:
@@ -167,7 +198,7 @@ def pca_and_plot(dataset: list, labels: list, dim: int,
             textposition="top center",
             textfont_size=20,
             mode='markers+text',
-            marker={'size': 10, 'opacity': 1, 'color': 'blue'}
+            marker={'size': 10, 'opacity': 1, 'color': '#F907FC',}
         )
         plotting_data.append(trace_input)
 
@@ -179,7 +210,7 @@ def pca_and_plot(dataset: list, labels: list, dim: int,
             textposition="top center",
             textfont_size=20,
             mode='markers+text',
-            marker={'size': 10, 'opacity': 1, 'color': 'green',}
+            marker={'size': 10, 'opacity': 1, 'color': '#05D6D9'}
         )
         plotting_data.append(trace_input)
 
@@ -196,9 +227,12 @@ def pca_and_plot(dataset: list, labels: list, dim: int,
 
     # Create and save the figure
     plot_figure = go.Figure(data=plotting_data, layout=layout)
-    plot_figure.write_image(f'{dim}dscatter_{time_interval}_{key}.png')
+    if tsne:
+        plot_figure.write_image(f'{dim}dscatter_{key}_TSNE.png')
+    else:
+        plot_figure.write_image(f'{dim}dscatter_{key}_PCA.png')
 
-    return
+    return pca_dim
 
 if __name__ == "__main__":
 
@@ -209,11 +243,24 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Turn atari frames to have heat map gaze information')
     parser.add_argument('--key', help="Enter the MTurk key user provided. Ex: mspacman_JE5W3X5P3T")
     parser.add_argument('--dim', help="List the number of dimensions for PCA", type=int, default=2)
-    parser.add_argument('--ti',  help="Time interval for the audio segments", type=float, default=0.2)
+    parser.add_argument('--tsne', help="Enable TSNE", type=bool, default=False)
     args = parser.parse_args()
 
-    user_name = f"{args.key}_4"
+    dataset = []
+    labels  = []
 
-    (dataset, labels) = run_pase_on_file(user_name, args.ti)
+    for i in range(1, 11):
+        user_name = f"{args.key}_{i}"
 
-    pca_and_plot(dataset, labels, args.dim, args.ti, user_name)
+        (new_data, new_label) = run_pase_on_file(user_name)
+        print(f"Computed {user_name}")
+
+        for d in new_data:
+            dataset.append(d)
+        for l in new_label:
+            labels.append(l)
+
+    calculate_cosine_distance(dataset, labels)
+    pca_dim = pca_and_plot(dataset, labels, args.dim, args.key, args.tsne)
+
+    #calculate_cosine_distance(pca_dim, labels)
