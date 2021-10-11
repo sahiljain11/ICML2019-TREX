@@ -11,7 +11,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from run_test import *
-from baselines.common.trex_utils import preprocess
 
 import os
 
@@ -266,6 +265,12 @@ if __name__=="__main__":
     elif env_name == "qbert":
         env_id = "QbertNoFrameskip-v4"
         agc_env_name = "qbert"
+    elif env_name == "enduro":
+        env_id = "EnduroNoFrameskip-v4"
+        agc_env_name = "enduro"
+    elif env_name == "seaquest":
+        env_id = "SeaquestNoFrameskip-v4"
+        agc_env_name = "seaquest"
     else:
         print("env_name not supported")
         sys.exit(1)
@@ -304,7 +309,7 @@ if __name__=="__main__":
 
     data_dir = args.data_dir
     dataset = ds.AtariDataset(data_dir)
-    demonstrations, learning_returns = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, agc_env_name)
+    demonstrations, learning_returns = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, env_name)
 
 
     demo_lengths = [len(d) for d in demonstrations]
