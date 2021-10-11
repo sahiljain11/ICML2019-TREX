@@ -67,6 +67,7 @@ def get_sorted_traj_indices(env_name, dataset):
     #Note, we're only keeping the full demonstrations that end in terminal to avoid people who quit before the game was over
     traj_indices = []
     traj_scores = []
+    print(dataset.trajectories.keys())
     for t in dataset.trajectories[g]:
         if env_name == "revenge":
             traj_indices.append(t)
