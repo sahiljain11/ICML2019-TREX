@@ -1,1 +1,6 @@
 *.pyc
+audio_atari/frames/
+audio_atari/atarigrandchallenge/
+audio_atari/learned_reward_models/
+audio_atari/logs/
+audio_atari/ppo_models/
