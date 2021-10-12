@@ -11,6 +11,10 @@ import string
 #import matplotlib.pylab as plt
 import argparse
 
+"""
+python evaluateLearnedPolicy.py --env_name spaceinvaders --checkpointpath /home/sahilj/forked/ICML2019-TREX/tflogs_space01/checkpoints/43000
+"""
+
 def evaluate_learned_policy(env_name, checkpointpath):
     if env_name == "spaceinvaders":
         env_id = "SpaceInvadersNoFrameskip-v4"
@@ -106,10 +110,17 @@ if __name__=="__main__":
 
     res = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
 
+    val = 0.0
     #f = open("./eval/" + env_name + checkpointpath.replace("/","_") + "_evaluation.txt",'w')
     f = open(f"./eval/{res}.txt", "w")
     for r in returns:
         f.write("{}\n".format(r))
+        val += r
     f.close()
+
+    print(f"Total: {val}")
+    val = val / len(returns)
+    print(f"Average: {val}")
+
 
     print(f"Stored results in {res}.txt")
