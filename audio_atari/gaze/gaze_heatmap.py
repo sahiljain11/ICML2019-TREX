@@ -376,7 +376,7 @@ class PretrainedHeatmap():
         for i in range(traj_length):
             # convert stacked frame list (for a trajectory) into a batch
             img_np = stacked_img[i].squeeze()  # (1,84,84,4) --> (84,84,4)
-            img_np = img_np.astype(np.float32) #/ 255.0 # already normalized
+            img_np = img_np.astype(np.float32) / 255.0 # not normalized
             img_np -= self.mean
             stacked_obs[i, :, :, :] = img_np.squeeze()
 

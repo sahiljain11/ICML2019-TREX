@@ -1,4 +1,6 @@
 *.pyc
+*.pkl
+
 audio_atari/frames/
 audio_atari/atarigrandchallenge/
 audio_atari/learned_reward_models/

@@ -57,5 +57,5 @@ if __name__ == "__main__":
         name = item.split(".")[0]
         json_data = load_json_data(f"{args.json_dir}/{item}")
 
-        write_txt(json_data, f"{args.output_dir}/mspacman/{name}.txt", name)
+        write_txt(json_data, f"{args.output_dir}/{name}.txt", name)
         rename_screens(f"{args.screen_dir}/{name}")
