@@ -18,6 +18,7 @@ class CreateGaze():
     def StackFrames(self, frames):
         import copy
         """stack every four frames to make an observation (84,84,4)"""
+        # stacked = np.zeros((len(frames), 84, 84, 4))
         stacked = []
         stacked_obs = np.zeros((84, 84, 4))
         for i in range(len(frames)):
@@ -32,6 +33,7 @@ class CreateGaze():
                 stacked_obs[:, :, 2] = frames[i]
                 stacked_obs[:, :, 3] = frames[i]
             stacked.append(np.expand_dims(copy.deepcopy(stacked_obs), 0))
+            # stacked[i,:,:,:] = np.expand_dims(copy.deepcopy(stacked_obs), 0)
         return stacked
 
 
@@ -48,6 +50,7 @@ class CreateGaze():
         demo_dirs = os.listdir(img_dir)
         gaze_maps = {}
         for demo in demo_dirs:
+            print(demo)
             demo_dir = os.path.join(img_dir,demo)
             if os.path.isdir(demo_dir):
                 traj = []
@@ -61,12 +64,18 @@ class CreateGaze():
                         traj.append(img_np)
 
                 stacked_traj = StackFrames(traj)
+                # print(len(stacked_traj),stacked_traj[0].shape)  # 11480 (1, 84, 84, 4)
 
                 gaze = h.get_heatmap(stacked_traj, self.heatmap_shape) 
-                gaze_maps[demo] = gaze
+                # print(gaze.shape)  # (11480, 84, 84)
+                
+                
+                gaze_maps[int(demo)] = gaze
+                
 
-        with open('gaze_'+self.env_name+'.pkl', 'wb') as handle:
-            pkl.dump(gaze_maps, handle, protocol=pkl.HIGHEST_PROTOCOL)
+        # with open('gaze_'+self.env_name+'.pkl', 'wb') as handle:
+        #     pkl.dump(gaze_maps, handle, protocol=pkl.HIGHEST_PROTOCOL)
+        np.save('gaze_'+self.env_name+'.npy', gaze_maps) 
 
 
 def main():

@@ -1,5 +1,6 @@
 *.pyc
 *.pkl
+*.json
 
 audio_atari/frames/
 audio_atari/atarigrandchallenge/
