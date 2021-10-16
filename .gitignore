@@ -1,1 +1,11 @@
 *.pyc
+*.pkl
+*.json
+
+audio_atari/frames/
+audio_atari/atarigrandchallenge/
+audio_atari/learned_reward_models/
+audio_atari/logs/
+audio_atari/ppo_models/
+audio_atari/.ipynb_checkpoints/
+audio_atari/visualization/yes-no_audio-samples/
