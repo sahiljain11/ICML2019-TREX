@@ -1,11 +1,11 @@
 #!/bin/bash
 
 #SBATCH --job-name eval_mspacman_2
-#SBATCH --output=logs/slurmjob_%j.out
-#SBATCH --error=logs/slurmjob_%j.err
-#SBATCH --mail-user=asaran@cs.utexas.edu
+#SBATCH --output=logs/eval_mspacman_2_%j.out
+#SBATCH --error=logs/eval_mspacman_2_%j.err
+#SBATCH --mail-user=akankshasaran@utexas.edu
 #SBATCH --mail-type=END,FAIL,REQUEUE
-#SBATCH --partition titans
+#SBATCH --partition dgx
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --time 72:00:00

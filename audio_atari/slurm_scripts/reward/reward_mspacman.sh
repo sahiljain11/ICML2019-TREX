@@ -10,7 +10,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --time 72:00:00
 #SBATCH --gres=gpu:1
-#SBATCH --mem=10G
+#SBATCH --mem=20G
 #SBATCH --cpus-per-task=4
 
 python LearnAtariRewardAGC.py --env_name mspacman --data_dir ./frames --reward_model_path ./learned_reward_models/mspacman.params
