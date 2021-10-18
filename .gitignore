@@ -13,3 +13,4 @@ audio_atari/visualization/yes-no_audio-samples/
 audio_atari/slurm_scripts/eval/
 audio_atari/slurm_scripts/PPO/
 audio_atari/slurm_scripts/reward/
+audio_atari/ROMs/
