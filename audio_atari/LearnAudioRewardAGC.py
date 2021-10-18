@@ -3,6 +3,7 @@ import agc_demos
 import agc.dataset as ds
 
 import pickle
+from audio.contrastive_loss import ContrastiveLoss
 import gym
 import time
 import numpy as np
@@ -13,6 +14,9 @@ import torch.nn.functional as F
 from run_test import *
 
 import os
+import math
+
+from audio.contrastive_loss import *
 
 """
 python LearnAtariRewardAGC.py --env_name mspacman --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/mspacman.params
@@ -35,25 +39,6 @@ def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_le
     training_obs = []
     training_labels = []
     num_demos = len(demonstrations)
-
-    # TODO: load complete json to find utterance start and stop times
-    # sample yes and no utterances (frame IDs divisible by 16)
-    # a vector of no snippets and a vector of all yes snippets
-    # collect a list of negative and positive samples as vector 1
-    # collect another list of negative and positive samples as vector 2
-    # corresponding indices in vector1 and vector2 are positive pairs
-    # then implement contrastive loss using code from https://zablo.net/blog/post/understanding-implementing-simclr-guide-eli5-pytorch/ 
-
-    # length of snippet fixed between 1-5 seconds
-    # ti_start and ti_stop determined from the yes/no labels
-    # dont skip frame stacks (5 sec snippets at 30fps just give you ~10 frame stacks)
-    # accumulate returns for these snippets
-
-    # other option is to select snippets from yes, no pairs and directly add to the T-rex loss 
-    # (returns for yes should be higher than return for no's)
-
-    # fine tune with this small set
-
   
     #fixed size snippets with progress prior
     for n in range(num_snippets):
@@ -92,7 +77,129 @@ def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_le
     print("maximum traj length", max_traj_length)
     return training_obs, training_labels
 
+def create_CAL_training_data(demonstrations, audio, num_snippets):
+    # TODO: load complete json to find utterance start and stop times
+    # sample yes and no utterances (frame IDs divisible by 16)
+    # a vector of no snippets and a vector of all yes snippets
+    # collect a list of negative and positive samples as vector 1
+    # collect another list of negative and positive samples as vector 2
+    # corresponding indices in vector1 and vector2 are positive pairs
+    # then implement contrastive loss using code from https://zablo.net/blog/post/understanding-implementing-simclr-guide-eli5-pytorch/ 
 
+    # length of snippet fixed between 1-5 seconds
+    # ti_start and ti_stop determined from the yes/no labels
+    # dont skip frame stacks (5 sec snippets at 60fps just give you ~20 frame stacks)
+    # accumulate returns for these snippets
+
+    # other option is to select snippets from yes, no pairs and directly add to the T-rex loss 
+    # (returns for yes should be higher than return for no's)
+
+    # fine tune with this small set
+
+    snippet_pairs = []
+
+    # max_traj_length = 0
+    # training_obs = []
+    # training_labels = []
+    num_demos = len(demonstrations)
+    fr = math.ceil(60/16)
+    conf = 0.7
+
+    # in seconds
+    left_offset, right_offset = 3.0, 3.0
+
+    # for each demo, collect start and stop frame indices of yes and no indices (use conf = 0.8)
+    # linear scan, yes start and stop boundary
+    yes_indices, no_indices = [], []
+    for j,demo in enumerate(audio):
+        yes, no = [], []
+        start = False
+        for i,frame_stack in enumerate(demo):
+
+            # start of a 'yes' speech segment
+            if demo[i]['word']=='yes':
+                if start==False and demo[i]['conf']>=conf:
+                    if (i>0 and demo[i-1]['word']==None) or i==0:
+                        start = True
+                        start_idx = i
+                    
+                elif start==True and demo[i]['conf']>=conf:
+                    if i==len(demo)-1 or (i<len(demo)-1 and demo[i+1]['word']==None):
+                        start = False
+                        stop_idx = i
+                        yes.append([start_idx,stop_idx])
+
+            # start of a 'no' speech segment
+            elif demo[i]['word']=='no':
+                if start==False and demo[i]['conf']>=conf:
+                    if (i>0 and demo[i-1]['word']==None) or i==0:
+                        start = True
+                        start_idx = i
+                    
+                elif start==True and demo[i]['conf']>=conf:
+                    if i==len(demo)-1 or (i<len(demo)-1 and demo[i+1]['word']==None):
+                        start = False
+                        stop_idx = i
+                        no.append([start_idx,stop_idx])
+
+        print(j, ', yes: ', len(yes), ' no: ', len(no))
+        yes_indices.append(yes)
+        no_indices.append(no)
+
+
+    
+    indices = [yes_indices, no_indices]
+    print('yes utterances: ', len(yes_indices))
+    print('no utterances: ', len(no_indices))
+
+    #fixed size snippets with progress prior
+    for n in range(num_snippets):
+        ti, tj = 0, 0
+        label_len_i, label_len_j = 0,0
+
+        #pick two random demonstrations (could be the same demo)
+        while(label_len_i==0 or label_len_j==0):
+            ti = np.random.randint(num_demos)
+            tj = np.random.randint(num_demos)
+
+            # randomly pick yes/no
+            label = np.random.randint(2)
+
+            # randomly pick corresponding index pair from ti
+            label_len_i, label_len_j = len(indices[label][ti]), len(indices[label][tj])
+
+        snippet_id_i, snippet_id_j = np.random.randint(label_len_i), np.random.randint(label_len_j)
+        ti_start, ti_stop = indices[label][ti][snippet_id_i][0], indices[label][ti][snippet_id_i][1]
+        tj_start, tj_stop = indices[label][tj][snippet_id_j][0], indices[label][tj][snippet_id_j][1]
+
+
+        #print(ti, tj)
+        #create random snippets
+        #find min length of both demos to ensure we can pick a demo no earlier than that chosen in worse preferred demo
+        # rand_length = np.random.randint(min_snippet_length, max_snippet_length)
+
+        # ti_start = np.random.randint(min_length - rand_length + 1)
+        #print(ti_start, len(demonstrations[tj]))
+        left = np.random.randint(int(left_offset*fr))
+        right = np.random.randint(int(right_offset*fr))
+        ti_start = max(0,ti_start-left)
+        ti_stop = min(ti_stop+right,len(demonstrations[ti]))
+        ti_start = np.random.randint(ti_start, ti_stop)
+
+        tj_start = max(0,tj_start-left)
+        tj_stop = min(tj_stop+right,len(demonstrations[tj]))
+        tj_start = np.random.randint(tj_start, tj_stop)
+
+        #print("start", ti_start, tj_start)
+        traj_i = demonstrations[ti][ti_start:ti_stop] 
+        traj_j = demonstrations[tj][tj_start:tj_stop]
+    
+        snippet_pairs.append((traj_i,traj_j))
+
+    print('snippet pairs: ', len(snippet_pairs))
+    return snippet_pairs
+
+    
 
 class Net(nn.Module):
     def __init__(self):
@@ -120,6 +227,7 @@ class Net(nn.Module):
         x = x.reshape(-1, 784)
         x = F.leaky_relu(self.fc1(x))
         r = self.fc2(x)
+        # print(r)
         sum_rewards += torch.sum(r)
         sum_abs_rewards += torch.sum(torch.abs(r))
         return sum_rewards, sum_abs_rewards
@@ -130,91 +238,79 @@ class Net(nn.Module):
         '''compute cumulative return for each trajectory and return logits'''
         cum_r_i, abs_r_i = self.cum_return(traj_i)
         cum_r_j, abs_r_j = self.cum_return(traj_j)
-        return torch.cat((cum_r_i.unsqueeze(0), cum_r_j.unsqueeze(0)),0), abs_r_i + abs_r_j
+        # print(cum_r_i.item(), cum_r_j.item())
+        # return torch.cat((cum_r_i.unsqueeze(0), cum_r_j.unsqueeze(0)),0), abs_r_i + abs_r_j
+        return cum_r_i.unsqueeze(0).unsqueeze(0), cum_r_j.unsqueeze(0).unsqueeze(0)
 
 
 
 
 
-def learn_reward(reward_network, optimizer, training_inputs, training_outputs, num_iter, l1_reg, checkpoint_dir):
+def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, checkpoint_dir):
     #check if gpu available
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # Assume that we are on a CUDA machine, then this should print a CUDA device:
     print(device)
-    loss_criterion = nn.CrossEntropyLoss()
+    # loss_criterion = nn.CrossEntropyLoss()
     #print(training_data[0])
     cum_loss = 0.0
-    training_data = list(zip(training_inputs, training_outputs))
+    batch_size = 32
+    num_batches = int(len(training_data)/batch_size)
+    # training_data = list(zip(training_inputs, training_outputs))
+
+    loss_criterion = ContrastiveLoss(batch_size)
+
     for epoch in range(num_iter):
         np.random.shuffle(training_data)
-        training_obs, training_labels = zip(*training_data)
-        for i in range(len(training_labels)):
-            traj_i, traj_j = training_obs[i]
-            labels = np.array([training_labels[i]])
-            traj_i = np.array(traj_i)
-            traj_j = np.array(traj_j)
-            traj_i = torch.from_numpy(traj_i).float().to(device)
-            traj_j = torch.from_numpy(traj_j).float().to(device)
-            labels = torch.from_numpy(labels).to(device)
+        # training_obs, training_labels = zip(*training_data)
 
-            #zero out gradient
+        # replace by batch size
+        for j in range(num_batches):
+             #zero out gradient
             optimizer.zero_grad()
+            # print('batch: {}/{}'.format(j,num_batches))
+            rewards_i, rewards_j = torch.empty((0), dtype=torch.float, device = 'cuda'), torch.empty((0), dtype=torch.float, device = 'cuda')
+            # print('rewards_i shape: ',rewards_i.shape)
+            # print('rewards_i size: ',rewards_i.nelement())
 
-            #forward + backward + optimize
-            outputs, abs_rewards = reward_network.forward(traj_i, traj_j)
-            #print(outputs[0], outputs[1])
-            #print(labels.item())
-            outputs = outputs.unsqueeze(0)
-            #print("outputs", outputs)
-            #print("labels", labels)
-            loss = loss_criterion(outputs, labels) + l1_reg * abs_rewards
+            for i in range(j*batch_size,min((j+1)*batch_size,len(training_data))):
+                traj_i, traj_j = training_obs[i]
+                # labels = np.array([training_labels[i]])
+                traj_i = np.array(traj_i)
+                traj_j = np.array(traj_j)
+                traj_i = torch.from_numpy(traj_i).float().to(device)
+                traj_j = torch.from_numpy(traj_j).float().to(device)
+                # labels = torch.from_numpy(labels).to(device)
+
+                #forward + backward + optimize
+                # outputs, abs_rewards = reward_network.forward(traj_i, traj_j)
+                r_i, r_j = reward_network.forward(traj_i, traj_j)
+                # print('r_i shape:',r_i.shape)
+
+                # rewards_i.append([r_i.item()])
+                # rewards_j.append([r_j.item()])
+                rewards_i = torch.cat((rewards_i,r_i),0)
+                rewards_j = torch.cat((rewards_j,r_j),0)
+
+            # outputs = outputs.unsqueeze(0)
+
+            # TODO: update loss to CAL for every batch
+            # print(rewards_i.shape)
+            loss = loss_criterion(rewards_i, rewards_j)
+            # loss = loss_criterion(outputs, labels) + l1_reg * abs_rewards
             loss.backward()
             optimizer.step()
 
-            #print stats to see if learning
-            item_loss = loss.item()
-            cum_loss += item_loss
-            if i % 500 == 499:
-                #print(i)
-                print("epoch {}:{} loss {}".format(epoch,i, cum_loss))
-                print(f"abs_rewards: {abs_rewards.item()}\n")
-                cum_loss = 0.0
-                torch.save(reward_net.state_dict(), checkpoint_dir)
+        #print stats to see if learning
+        item_loss = loss.item()
+        cum_loss += item_loss
+        if i % 500 == 499:
+            print(i)
+            print("epoch {}:{} loss {}".format(epoch,i, cum_loss))
+            # print(f"abs_rewards: {abs_rewards.item()}\n")
+            cum_loss = 0.0
+            torch.save(reward_net.state_dict(), checkpoint_dir)
     print("finished training")
-
-
-
-
-
-def calc_accuracy(reward_network, training_inputs, training_outputs):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    loss_criterion = nn.CrossEntropyLoss()
-    #print(training_data[0])
-    num_correct = 0.
-    with torch.no_grad():
-        for i in range(len(training_inputs)):
-            label = training_outputs[i]
-            #print(inputs)
-            #print(labels)
-            traj_i, traj_j = training_inputs[i]
-            traj_i = np.array(traj_i)
-            traj_j = np.array(traj_j)
-            traj_i = torch.from_numpy(traj_i).float().to(device)
-            traj_j = torch.from_numpy(traj_j).float().to(device)
-
-            #forward to get logits
-            outputs, abs_return = reward_network.forward(traj_i, traj_j)
-            #print(outputs)
-            _, pred_label = torch.max(outputs,0)
-            #print(pred_label)
-            #print(label)
-            if pred_label.item() == label:
-                num_correct += 1.
-    return num_correct / len(training_inputs)
-
-
-
-
 
 
 def predict_reward_sequence(net, traj):
@@ -236,6 +332,7 @@ if __name__=="__main__":
     parser.add_argument('--env_name', default='', help='Select the environment name to run, i.e. pong')
     parser.add_argument('--reward_model_path', default='', help="name and location for learned model params")
     parser.add_argument('--seed', default=0, help="random seed for experiments")
+    parser.add_argument('--num_snippets', default=6000, help="number of snippets to train the reward network with")
     parser.add_argument('--data_dir', help="where agc data is located, e.g. path to atari_v1/")
     # TODO: add Contrastive Audio Loss (CAL)
     # TODO: add Pairwise Ranking Loss on demo snippets which have audio
@@ -281,7 +378,7 @@ if __name__=="__main__":
 
     print("Training reward for", env_id)
     num_trajs = 0 
-    num_snippets = 6000
+    num_snippets = int(args.num_snippets)
     num_super_snippets = 0
     min_snippet_length = 50 #min length of trajectory for training comparison
     maximum_snippet_length = 100
@@ -303,8 +400,8 @@ if __name__=="__main__":
 
     data_dir = args.data_dir
     dataset = ds.AtariDataset(data_dir)
-    demonstrations, learning_returns = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, env_name)
-
+    demonstrations, learning_returns, human_ann, human_heatmap  = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, env_name)
+    # print(human_ann)
 
     demo_lengths = [len(d) for d in demonstrations]
     print("demo lengths", demo_lengths)
@@ -316,21 +413,24 @@ if __name__=="__main__":
     print([a[0] for a in zip(learning_returns, demonstrations)])
     
     demonstrations = [x for _, x in sorted(zip(learning_returns,demonstrations), key=lambda pair: pair[0])]
+    audio = [x for _, x in sorted(zip(learning_returns,human_ann), key=lambda pair: pair[0])]
+    # gaze = [x for _, x in sorted(zip(learning_returns,human_heatmap), key=lambda pair: pair[0])]
 
     sorted_returns = sorted(learning_returns)
     print(sorted_returns)
-    training_obs, training_labels = create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env)
+    # training_obs, training_labels = create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env)
+    training_obs = create_CAL_training_data(demonstrations, audio, num_snippets)
+    
     print("num training_obs", len(training_obs))
-    print("num_labels", len(training_labels))
+    # print("num_labels", len(training_labels))
     # Now we create a reward network and optimize it using the training data.
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     reward_net = Net()
     reward_net.to(device)
     import torch.optim as optim
     optimizer = optim.Adam(reward_net.parameters(),  lr=lr, weight_decay=weight_decay)
-    learn_reward(reward_net, optimizer, training_obs, training_labels, num_iter, l1_reg, args.reward_model_path)
+    learn_reward(reward_net, optimizer, training_obs, num_iter, l1_reg, args.reward_model_path)
     
-
     torch.save(reward_net.state_dict(), args.reward_model_path)
 
     with torch.no_grad():
@@ -338,7 +438,7 @@ if __name__=="__main__":
     for i, p in enumerate(pred_returns):
         print(i,p,sorted_returns[i])
 
-    print("accuracy", calc_accuracy(reward_net, training_obs, training_labels))
+    # print("accuracy", calc_accuracy(reward_net, training_obs, training_labels))
 
 
     print(f"Total time: {time.time() - start}")
