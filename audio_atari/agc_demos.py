@@ -85,6 +85,7 @@ def get_sorted_traj_indices(env_name, dataset):
             traj_scores.append(dataset.trajectories[g][t][-1]['score'])
             traj_ann.append(dataset.trajectories[g][t][-1]['ann'])
             traj_heatmap.append(dataset.trajectories[g][t][-1]['heatmap'])
+            
 
         elif dataset.trajectories[g][t][-1]['terminal']:
             traj_indices.append(t)
@@ -93,7 +94,8 @@ def get_sorted_traj_indices(env_name, dataset):
             traj_heatmap.append(dataset.trajectories[g][t][-1]['heatmap'])
 
     annotations = dataset.annotations[g]
-    heatmaps    = dataset.annotations[g]
+    # heatmaps    = dataset.annotations[g]
+    heatmaps = dataset.heatmap[g]
 
     sorted_traj_indices = [x for _, x in sorted(zip(traj_scores, traj_indices), key=lambda pair: pair[0])]
     sorted_traj_scores = sorted(traj_scores)
@@ -155,6 +157,7 @@ def get_preprocessed_trajectories(env_name, dataset, data_dir, preprocess_name):
    
     print("generating human demos for", env_name)
     demos, annotations, heatmaps = get_sorted_traj_indices(env_name, dataset)
+
     human_scores  = []
     human_demos   = []
     human_ann     = []

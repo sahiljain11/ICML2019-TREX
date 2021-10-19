@@ -29,9 +29,9 @@ def preprocess2_batch(smap):
 def computeKL_batch(saliency_map, gt_saliency_map):
     epsilon = 2.2204e-16 #MIT benchmark
     N = saliency_map.shape[0]
-    # print(saliency_map.shape, gt_saliency_map.shape)
-    assert(saliency_map.shape==gt_saliency_map.shape)
     
+    assert(saliency_map.shape==gt_saliency_map.shape)
+
     saliency_map = preprocess_batch(saliency_map)
     saliency_map = torch.clamp(saliency_map, epsilon, None)
     saliency_map = torch.div(saliency_map, torch.sum(saliency_map,1).view(N,1))
@@ -42,6 +42,7 @@ def computeKL_batch(saliency_map, gt_saliency_map):
     
     kl = gt_saliency_map*torch.log(torch.div(gt_saliency_map,saliency_map))
     return torch.sum(kl,1)
+
 
 def computeIG_batch(saliency_map, gt_saliency_map):
     epsilon = 2.2204e-16 #MIT benchmark
