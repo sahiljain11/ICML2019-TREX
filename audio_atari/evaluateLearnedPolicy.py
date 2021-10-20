@@ -108,11 +108,11 @@ if __name__=="__main__":
     returns = evaluate_learned_policy(env_name, checkpointpath)
     #write returns to file
 
-    res = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-
+    #res = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    res = "./eval/" + env_name + checkpointpath.replace("/","_") + "_evaluation.txt"
     val = 0.0
-    #f = open("./eval/" + env_name + checkpointpath.replace("/","_") + "_evaluation.txt",'w')
-    f = open(f"./eval/{res}.txt", "w")
+    f = open("./eval/" + env_name + checkpointpath.replace("/","_") + "_evaluation.txt",'w')
+    #f = open(f"./eval/{res}.txt", "w")
     for r in returns:
         f.write("{}\n".format(r))
         val += r
@@ -121,6 +121,5 @@ if __name__=="__main__":
     print(f"Total: {val}")
     val = val / len(returns)
     print(f"Average: {val}")
-
 
     print(f"Stored results in {res}.txt")

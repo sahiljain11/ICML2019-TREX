@@ -5,9 +5,10 @@ import os
 import cv2
 import numpy as np
 import os.path as path
-from agc_demos import *
+# from agc_demos import *
 import pickle as pkl
 from scipy import misc
+import argparse
 
 class CreateGaze():
     def __init__(self, env_name, heatmap_shape=84):
@@ -34,6 +35,7 @@ class CreateGaze():
                 stacked_obs[:, :, 3] = frames[i]
             stacked.append(np.expand_dims(copy.deepcopy(stacked_obs), 0))
             # stacked[i,:,:,:] = np.expand_dims(copy.deepcopy(stacked_obs), 0)
+        # print(len(frames), len(stacked))
         return stacked
 
 
@@ -63,12 +65,11 @@ class CreateGaze():
                         img_np = misc.imresize(img_np, [84, 84], interp='bilinear')
                         traj.append(img_np)
 
-                stacked_traj = StackFrames(traj)
+                stacked_traj = self.StackFrames(traj)
                 # print(len(stacked_traj),stacked_traj[0].shape)  # 11480 (1, 84, 84, 4)
 
                 gaze = h.get_heatmap(stacked_traj, self.heatmap_shape) 
                 # print(gaze.shape)  # (11480, 84, 84)
-                
                 
                 gaze_maps[int(demo)] = gaze
                 
