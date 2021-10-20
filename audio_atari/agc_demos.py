@@ -61,8 +61,16 @@ def StackFrames(frames, annotations, heatmaps):
             stacked_obs[:,:,2] = frames[i-1]
             stacked_obs[:,:,3] = frames[i]    # get audio annotation and heatmap for just this frame
             stacked.append(np.expand_dims(copy.deepcopy(stacked_obs),0))
+            
+            ann = annotations[i]
+            if ann['word'] != None:
+                for j in range(i-3, i):
+                    if annotations[j]['word'] != None:
+                        ann = annotations[j]
+                        print(ann)
+                        break
 
-            anns.append(annotations[i])
+            anns.append(ann)
             maps.append(heatmaps[i])
     return stacked, anns, maps
 
@@ -93,6 +101,7 @@ def get_sorted_traj_indices(env_name, dataset):
             traj_heatmap.append(dataset.trajectories[g][t][-1]['heatmap'])
 
     annotations = dataset.annotations[g]
+    #heatmaps    = dataset.heatmap[g]
     heatmaps    = dataset.annotations[g]
 
     sorted_traj_indices = [x for _, x in sorted(zip(traj_scores, traj_indices), key=lambda pair: pair[0])]
@@ -159,7 +168,7 @@ def get_preprocessed_trajectories(env_name, dataset, data_dir, preprocess_name):
     human_demos   = []
     human_ann     = []
     human_heatmap = []
-    for indx, score, ann, heatmap in demos:
+    for indx, score, _, _ in demos:
         human_scores.append(score)
         traj_dir = path.join(data_dir, 'screens', env_name, str(indx))
         #print("generating traj from", traj_dir)
