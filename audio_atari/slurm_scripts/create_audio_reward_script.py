@@ -9,9 +9,9 @@ bash_file_name = 'reward/reward_CAL_'+env[0]+'.sh'
 f = open(bash_file_name,'w')
 f.write("#!/bin/bash\n\n")
 
-f.write('#SBATCH --job-name reward_'+env[0]+'\n')
-f.write('#SBATCH --output=logs/reward_'+env[0]+'_%j.out\n')
-f.write('#SBATCH --error=logs/reward_'+env[0]+'_%j.err\n')
+f.write('#SBATCH --job-name reward_cal_'+env[0]+'\n')
+f.write('#SBATCH --output=logs/reward_cal_'+env[0]+'_%j.out\n')
+f.write('#SBATCH --error=logs/reward_cal_'+env[0]+'_%j.err\n')
 f.write('#SBATCH --mail-user=akankshasaran@utexas.edu\n')
 f.write('#SBATCH --mail-type=END,FAIL,REQUEUE\n')
 f.write('#SBATCH --partition '+server+'\n')

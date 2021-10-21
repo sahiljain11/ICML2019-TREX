@@ -19,20 +19,6 @@ from gaze.coverage import *
 from tensorboardX import SummaryWriter
 
 
-"""
-python LearnAtariRewardAGC.py --env_name mspacman --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/mspacman.params
-python LearnAtariRewardAGC.py --env_name spaceinvaders --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/spaceinvaders0.params --seed 0
-"""
-
-'''
-To train on a reward network, use the following command:
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs python -m baselines.run --alg=ppo2 --env=MsPacmanNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/mspacman.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space00 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders0.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space01 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders0.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space10 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space11 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
-'''
 
 def create_training_data(demonstrations, gaze_maps, num_snippets, min_snippet_length, max_snippet_length):
     #collect training data
@@ -118,14 +104,15 @@ class Net(nn.Module):
         conv_map_traj = []
         conv_map_stacked = torch.tensor([[]]) # 26,11,9,7 (size of conv layers)
 
-        gaze_conv = x4
-        conv_map = gaze_conv
+        conv_map = x4
+        # print('conv map: ',conv_map.shape)
 
         # 1x1 convolution followed by softmax to get collapsed and normalized conv output
         norm_operator = nn.Conv2d(16, 1, kernel_size=1, stride=1)
         if torch.cuda.is_available():
             norm_operator.cuda()
-        attn_map = norm_operator(torch.squeeze(conv_map))
+        # attn_map = norm_operator(torch.squeeze(conv_map))
+        attn_map = norm_operator(conv_map)
 
         conv_map_traj.append(attn_map)
         conv_map_stacked = torch.stack(conv_map_traj)
