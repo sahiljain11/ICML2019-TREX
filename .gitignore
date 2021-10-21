@@ -14,3 +14,4 @@ audio_atari/slurm_scripts/eval/
 audio_atari/slurm_scripts/PPO/
 audio_atari/slurm_scripts/reward/
 audio_atari/ROMs/
+audio_atari/multimodal_reward_models/
