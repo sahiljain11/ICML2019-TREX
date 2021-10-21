@@ -4,6 +4,16 @@
 This directory contains code and learned reward functions for "Extrapolating Beyond Suboptimal Demonstrations via Inverse Reinforcement Learning from Observations". ICML 2019.
 
 
+## Javatari Conversion
+
+Javatari stores information in a JSON format for each timestep. However, the AGC code expects the data to be stored in different folders for each game, put in directory 1, 2, ..., etc., and each .txt file and frame information to be numbered 1.txt, 2.txt, ... and 1.png, 2.png, ...
+
+Because of this formatting, we can use the following command to turn all of the jsons into the text file format AGC expects as well as renaming all the frame files to be correct. An example of this can be seen as follows:
+
+```python json_to_txt.py --json_dir ./frames/trajectories_json --output_dir ./frames/trajectories --screen_dir ./frames/screens/mspacman```
+
+The only manualy manual step currently is turning the trajectory key names into 1, 2, ..., etc. so you can decide what number corresponds to what trajectory.
+
 ## T-REX reward learning for Atari ##
 
 First download PPO checkpoints into the models directory
