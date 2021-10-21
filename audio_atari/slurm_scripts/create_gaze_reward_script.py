@@ -1,8 +1,11 @@
+
 # env_names = [['seaquest','Seaquest'],['spaceinvaders','SpaceInvaders'],['mspacman','MsPacman'],['enduro','Enduro'],['montezumarevenge','MontezumaRevenge']]
-env = ['seaquest','Seaquest']
+# env = ['seaquest','Seaquest']
+# env = ['spaceinvaders','SpaceInvaders']
+env = ['mspacman','MsPacman']
 server = 'titans' #'dgx'
 
-bash_file_name = 'reward/reward_'+env[0]+'.sh'
+bash_file_name = 'reward/reward_CGL_'+env[0]+'.sh'
 f = open(bash_file_name,'w')
 f.write("#!/bin/bash\n\n")
 
@@ -19,6 +22,6 @@ f.write('#SBATCH --gres=gpu:1\n')
 f.write('#SBATCH --mem=20G\n')
 f.write('#SBATCH --cpus-per-task=4\n')
 
-f.write('python LearnAtariRewardAGC.py --env_name '+env[0]+' --data_dir ./frames --reward_model_path ./learned_reward_models/'+env[0]+'.params')
+f.write('python LearnGazeRewardAGC.py --env_name '+env[0]+' --data_dir ./frames --reward_model_path ./multimodal_reward_models/'+env[0]+'_CGL_only --gaze_loss_only')
       
 f.close()

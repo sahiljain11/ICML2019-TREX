@@ -1,9 +1,9 @@
 
 # env_names = [['seaquest','Seaquest'],['spaceinvaders','SpaceInvaders'],['mspacman','MsPacman'],['enduro','Enduro'],['montezumarevenge','MontezumaRevenge']]
 # env = ['seaquest','Seaquest']
-env = ['spaceinvaders','SpaceInvaders']
+# env = ['spaceinvaders','SpaceInvaders']
 # env = ['mspacman','MsPacman']
-# env = ['enduro','Enduro']
+env = ['enduro','Enduro']
 # env = ['montezumarevenge','MontezumaRevenge']
 
 server = 'titans' #'dgx'
