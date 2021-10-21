@@ -20,20 +20,6 @@ import torch.optim as optim
 from audio.contrastive_loss import *
 from tensorboardX import SummaryWriter
 
-"""
-python LearnAtariRewardAGC.py --env_name mspacman --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/mspacman.params
-python LearnAtariRewardAGC.py --env_name spaceinvaders --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/spaceinvaders0.params --seed 0
-"""
-
-'''
-To train on a reward network, use the following command:
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs python -m baselines.run --alg=ppo2 --env=MsPacmanNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/mspacman.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space00 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders0.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space01 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders0.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space10 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space11 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
-'''
 
 def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env_name):
     # TODO: update this function to use the audio snippets to rank trajectories instead of GT returns
@@ -82,7 +68,6 @@ def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_le
     return training_obs, training_labels
 
 def create_CAL_training_data(demonstrations, audio, num_snippets):
-    # TODO: load complete json to find utterance start and stop times
     # sample yes and no utterances (frame IDs divisible by 16)
     # a vector of no snippets and a vector of all yes snippets
     # collect a list of negative and positive samples as vector 1
@@ -441,7 +426,7 @@ if __name__=="__main__":
     learn_reward(reward_net, optimizer, training_obs, num_iter, l1_reg, args.reward_model_path, env_name)
 
     reward_path = args.reward_model_path+'/'+env_name+'.params'
-    torch.save(reward_net.state_dict(), args.reward_path)
+    torch.save(reward_net.state_dict(), reward_path)
 
     with torch.no_grad():
         pred_returns = [predict_traj_return(reward_net, traj) for traj in demonstrations]
