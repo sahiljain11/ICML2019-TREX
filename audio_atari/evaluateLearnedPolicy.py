@@ -119,7 +119,10 @@ if __name__=="__main__":
     f.close()
 
     print(f"Total: {val}")
+    # print('Total: {}'.format(val))
     val = val / len(returns)
+    # print('Average: {}'.format(val))
     print(f"Average: {val}")
 
     print(f"Stored results in {res}.txt")
+    # print("Stored results in {}.txt".format(res))

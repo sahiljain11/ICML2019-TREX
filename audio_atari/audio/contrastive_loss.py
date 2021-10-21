@@ -9,10 +9,11 @@ class ContrastiveLoss(nn.Module):
         self.batch_size = batch_size
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self.register_buffer("temperature", torch.tensor(temperature).to(device=device))
+        # self.register_buffer("temperature", torch.tensor(temperature).to(device=device))
         # self.register_buffer("negatives_mask", (~torch.eye(batch_size * 2, batch_size * 2, dtype=bool)).float())
-        self.register_buffer("negatives_mask", (~torch.eye(batch_size * 2, batch_size * 2, dtype=int)).float().to(device=device))
-
+        # self.register_buffer("negatives_mask", (~torch.eye(batch_size * 2, batch_size * 2, dtype=int)).float().to(device=device))
+        self.temperature = torch.tensor(temperature).to(device=device)
+        self.negatives_mask = 1-torch.eye(batch_size * 2,batch_size * 2).float().to(device=device)
             
     def forward(self, emb_i, emb_j):
         """
@@ -26,7 +27,6 @@ class ContrastiveLoss(nn.Module):
         representations = torch.cat([emb_i, emb_j], dim=0)
         # print(representations.shape) # torch.Size([64, 1])
 
-
         # compute similarity based on difference of rewards
         r1 = representations.unsqueeze(0).repeat(self.batch_size*2,1,1)
         r2 = representations.unsqueeze(1).repeat(1,self.batch_size*2,1)
@@ -36,6 +36,7 @@ class ContrastiveLoss(nn.Module):
         similarity_matrix = 1/(1+sim)
 
         similarity_matrix = similarity_matrix.squeeze()
+        # print('similarity matrix: ',similarity_matrix) 
 
         # print(similarity_matrix.is_cuda)
         # print(similarity_matrix.shape) #torch.Size([64, 64])
@@ -53,8 +54,13 @@ class ContrastiveLoss(nn.Module):
         # based on how close the pair actually is (from cosine similarity of their audio embeddings)
         # construct a dummy example
         nominator = torch.exp(positives / self.temperature)
+        # print('numerator:',nominator.shape)
         denominator = self.negatives_mask * torch.exp(similarity_matrix / self.temperature)
+        # print('negatives mask:', self.negatives_mask)
+        # print('denominator sum:',torch.sum(denominator, dim=1).shape)
     
         loss_partial = -torch.log(nominator / torch.sum(denominator, dim=1))
+        # print('loss partial: ',loss_partial)
         loss = torch.sum(loss_partial) / (2 * self.batch_size)
+        print('loss:',loss)
         return loss

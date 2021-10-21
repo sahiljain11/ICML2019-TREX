@@ -15,8 +15,10 @@ from run_test import *
 
 import os
 import math
+import torch.optim as optim
 
 from audio.contrastive_loss import *
+from tensorboardX import SummaryWriter
 
 """
 python LearnAtariRewardAGC.py --env_name mspacman --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/mspacman.params
@@ -34,6 +36,8 @@ OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked
 '''
 
 def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env_name):
+    # TODO: update this function to use the audio snippets to rank trajectories instead of GT returns
+
     #collect training data
     max_traj_length = 0
     training_obs = []
@@ -146,13 +150,12 @@ def create_CAL_training_data(demonstrations, audio, num_snippets):
         yes_indices.append(yes)
         no_indices.append(no)
 
-
     
     indices = [yes_indices, no_indices]
     print('yes utterances: ', len(yes_indices))
     print('no utterances: ', len(no_indices))
 
-    #fixed size snippets with progress prior
+    #fixed size snippets
     for n in range(num_snippets):
         ti, tj = 0, 0
         label_len_i, label_len_j = 0,0
@@ -213,7 +216,6 @@ class Net(nn.Module):
         self.fc2 = nn.Linear(64, 1)
 
 
-
     def cum_return(self, traj):
         '''calculate cumulative return of trajectory'''
         sum_rewards = 0
@@ -243,30 +245,35 @@ class Net(nn.Module):
         return cum_r_i.unsqueeze(0).unsqueeze(0), cum_r_j.unsqueeze(0).unsqueeze(0)
 
 
-
-
-
-def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, checkpoint_dir):
+def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, checkpoint_path, env):
     #check if gpu available
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # Assume that we are on a CUDA machine, then this should print a CUDA device:
     print(device)
     # loss_criterion = nn.CrossEntropyLoss()
     #print(training_data[0])
+
+    reward_path = checkpoint_path+'/'+env+'.params'
+    tb_dir = os.path.join(checkpoint_path,'tb/')
+    if not os.path.isdir(tb_dir):
+        os.makedirs(tb_dir)
+    writer = SummaryWriter(tb_dir)
+
     cum_loss = 0.0
     batch_size = 32
     num_batches = int(len(training_data)/batch_size)
     # training_data = list(zip(training_inputs, training_outputs))
 
     loss_criterion = ContrastiveLoss(batch_size)
-
+    k = 0
     for epoch in range(num_iter):
         np.random.shuffle(training_data)
         # training_obs, training_labels = zip(*training_data)
 
         # replace by batch size
         for j in range(num_batches):
-             #zero out gradient
+            k+=1
+            #zero out gradient
             optimizer.zero_grad()
             # print('batch: {}/{}'.format(j,num_batches))
             rewards_i, rewards_j = torch.empty((0), dtype=torch.float, device = 'cuda'), torch.empty((0), dtype=torch.float, device = 'cuda')
@@ -294,9 +301,10 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
 
             # outputs = outputs.unsqueeze(0)
 
-            # TODO: update loss to CAL for every batch
+            # update loss to CAL for every batch
             # print(rewards_i.shape)
             loss = loss_criterion(rewards_i, rewards_j)
+            writer.add_scalar('CAL', loss.item(), k)
             # loss = loss_criterion(outputs, labels) + l1_reg * abs_rewards
             loss.backward()
             optimizer.step()
@@ -304,13 +312,14 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
         #print stats to see if learning
         item_loss = loss.item()
         cum_loss += item_loss
-        if i % 500 == 499:
-            print(i)
-            print("epoch {}:{} loss {}".format(epoch,i, cum_loss))
+        if k % 500 == 499:
+            print(k)
+            print("epoch {}:{} loss {}".format(epoch,k,cum_loss))
             # print(f"abs_rewards: {abs_rewards.item()}\n")
             cum_loss = 0.0
-            torch.save(reward_net.state_dict(), checkpoint_dir)
+            torch.save(reward_net.state_dict(), reward_path)
     print("finished training")
+    writer.close()
 
 
 def predict_reward_sequence(net, traj):
@@ -427,11 +436,12 @@ if __name__=="__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     reward_net = Net()
     reward_net.to(device)
-    import torch.optim as optim
-    optimizer = optim.Adam(reward_net.parameters(),  lr=lr, weight_decay=weight_decay)
-    learn_reward(reward_net, optimizer, training_obs, num_iter, l1_reg, args.reward_model_path)
     
-    torch.save(reward_net.state_dict(), args.reward_model_path)
+    optimizer = optim.Adam(reward_net.parameters(),  lr=lr, weight_decay=weight_decay)
+    learn_reward(reward_net, optimizer, training_obs, num_iter, l1_reg, args.reward_model_path, env_name)
+
+    reward_path = args.reward_model_path+'/'+env_name+'.params'
+    torch.save(reward_net.state_dict(), args.reward_path)
 
     with torch.no_grad():
         pred_returns = [predict_traj_return(reward_net, traj) for traj in demonstrations]
@@ -439,6 +449,5 @@ if __name__=="__main__":
         print(i,p,sorted_returns[i])
 
     # print("accuracy", calc_accuracy(reward_net, training_obs, training_labels))
-
 
     print(f"Total time: {time.time() - start}")
