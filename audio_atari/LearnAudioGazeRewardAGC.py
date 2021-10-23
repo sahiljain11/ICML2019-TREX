@@ -204,7 +204,8 @@ class Net(nn.Module):
         norm_operator = nn.Conv2d(16, 1, kernel_size=1, stride=1)
         if torch.cuda.is_available():
             norm_operator.cuda()
-        attn_map = norm_operator(torch.squeeze(conv_map))
+        # attn_map = norm_operator(torch.squeeze(conv_map))
+        attn_map = norm_operator(conv_map)
 
         conv_map_traj.append(attn_map)
         conv_map_stacked = torch.stack(conv_map_traj)
@@ -287,7 +288,7 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
             outputs, abs_rewards, conv_map_i, conv_map_j = reward_network.forward(traj_i, traj_j)
             outputs = outputs.unsqueeze(0)
 
-            if loss_type=='rl':
+            if 'rl' in loss_type:
                 loss = loss_criterion(outputs, labels) + l1_reg * abs_rewards
                 writer.add_scalar('ranking_loss', loss.item(), k)
 
@@ -357,7 +358,7 @@ def calc_accuracy(reward_network, training_inputs, training_outputs):
             traj_j = torch.from_numpy(traj_j).float().to(device)
 
             #forward to get logits
-            outputs, abs_return = reward_network.forward(traj_i, traj_j)
+            outputs, abs_return, _, _ = reward_network.forward(traj_i, traj_j)
             #print(outputs)
             _, pred_label = torch.max(outputs,0)
             #print(pred_label)

@@ -340,7 +340,7 @@ def calc_accuracy(reward_network, training_inputs, training_outputs):
             traj_j = torch.from_numpy(traj_j).float().to(device)
 
             #forward to get logits
-            outputs, abs_return = reward_network.forward(traj_i, traj_j)
+            outputs, abs_return,_,_ = reward_network.forward(traj_i, traj_j)
             #print(outputs)
             _, pred_label = torch.max(outputs,0)
             #print(pred_label)
