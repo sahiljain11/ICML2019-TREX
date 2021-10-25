@@ -17,6 +17,10 @@ import os
 
 from gaze.coverage import *
 from tensorboardX import SummaryWriter
+from audio.contrastive_loss import *
+
+# TODO: add a different cal loss (auxiliary task of getting audio ranks correct)
+# (use shrink and perturb), start with audio, then standard TREX (vice versa)
 
 
 def create_training_data(demonstrations, gaze_maps, num_snippets, min_snippet_length, max_snippet_length):
@@ -176,7 +180,6 @@ class Net(nn.Module):
         self.fc2 = nn.Linear(64, 1)
 
 
-
     def cum_return(self, traj):
         '''calculate cumulative return of trajectory'''
         sum_rewards = 0
@@ -220,6 +223,12 @@ class Net(nn.Module):
         cum_r_j, abs_r_j, conv_map_j = self.cum_return(traj_j)
         return torch.cat((cum_r_i.unsqueeze(0), cum_r_j.unsqueeze(0)),0), abs_r_i + abs_r_j, conv_map_i, conv_map_j
 
+    def forward_cal(self, traj_i, traj_j):
+        '''compute cumulative return for each trajectory and return logits'''
+        cum_r_i, abs_r_i, conv_map_i = self.cum_return(traj_i)
+        cum_r_j, abs_r_j, conv_map_j = self.cum_return(traj_j)
+        return cum_r_i.unsqueeze(0).unsqueeze(0), cum_r_j.unsqueeze(0).unsqueeze(0)
+
 
 def CGL(training_gaze, conv_map_i, conv_map_j):
     gaze_i, gaze_j = training_gaze
@@ -245,7 +254,7 @@ def CGL(training_gaze, conv_map_i, conv_map_j):
 
 
 
-def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, checkpoint_dir, env, loss_type):
+def learn_reward(reward_network, optimizer, training_data, cal_training_data, num_iter, l1_reg, checkpoint_dir, env, loss_type):
 
     #check if gpu available
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -262,17 +271,27 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
     #print(training_data[0])
     cum_loss = 0.0
     gaze_reg = 0.5
+    gaze_scale = 0.001
+
     audio_reg = 0.5
+    audio_scale = 0.1
+
+    batch_size = 32
+    num_batches = int(len(cal_training_data)/batch_size)
+    cal_loss_criterion = ContrastiveLoss(batch_size)
 
     training_inputs, training_outputs, training_gaze = training_data
+    assert(len(training_outputs)>num_batches)
 
     training_data = list(zip(training_inputs, training_outputs, training_gaze))
     k = 0
     for epoch in range(num_iter):
         np.random.shuffle(training_data)
+        np.random.shuffle(cal_training_data)
         training_obs, training_labels, training_gaze = zip(*training_data)
 
         for i in range(len(training_labels)):
+
             k+=1
             traj_i, traj_j = training_obs[i]
             labels = np.array([training_labels[i]])
@@ -294,12 +313,30 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
 
             # gaze loss
             if 'cgl' in loss_type:
-                gaze_loss = CGL(training_gaze[i], conv_map_i, conv_map_j)
+                gaze_loss = gaze_scale*CGL(training_gaze[i], conv_map_i, conv_map_j)
                 writer.add_scalar('CGL', gaze_loss.item(), k)
 
             # audio loss
             if 'cal' in loss_type:
-                audio_loss = CGL(training_gaze[i], conv_map_i, conv_map_j)
+                # CAL
+                j = i%num_batches
+                rewards_m, rewards_n = torch.empty((0), dtype=torch.float, device = 'cuda'), torch.empty((0), dtype=torch.float, device = 'cuda')
+
+                for m in range(j*batch_size,min((j+1)*batch_size,len(cal_training_data))):
+                    traj_m, traj_n = cal_training_data[m]
+                    
+                    traj_m = np.array(traj_m)
+                    traj_n = np.array(traj_n)
+                    traj_m = torch.from_numpy(traj_m).float().to(device)
+                    traj_n = torch.from_numpy(traj_n).float().to(device)
+                    
+                    r_m, r_n = reward_network.forward_cal(traj_m, traj_n)
+                    
+                    rewards_m = torch.cat((rewards_m,r_m),0)
+                    rewards_n = torch.cat((rewards_n,r_n),0)
+
+
+                audio_loss = audio_scale*cal_loss_criterion(rewards_m, rewards_n)
                 writer.add_scalar('CAL', audio_loss.item(), k)
 
             if loss_type=='rl_cgl':
@@ -468,11 +505,14 @@ if __name__=="__main__":
     print([a[0] for a in zip(learning_returns, demonstrations)])
     
     demonstrations = [x for _, x in sorted(zip(learning_returns,demonstrations), key=lambda pair: pair[0])]
+    audio = [x for _, x in sorted(zip(learning_returns,human_ann), key=lambda pair: pair[0])]
 
     sorted_returns = sorted(learning_returns)
     print(sorted_returns)
     training_data = create_training_data(demonstrations, human_heatmap, num_snippets, min_snippet_length, max_snippet_length)
     training_obs, training_labels, training_gaze = training_data
+
+    cal_training_data = create_CAL_training_data(demonstrations, audio, num_snippets)
 
     print("num training_obs", len(training_obs))
     print("num_labels", len(training_labels))
@@ -483,7 +523,7 @@ if __name__=="__main__":
     
     # if args.cgl_type=='basic' or args.gaze_loss_only:
     optimizer = optim.Adam(reward_net.parameters(),  lr=lr, weight_decay=weight_decay)
-    learn_reward(reward_net, optimizer, training_data, num_iter, l1_reg, args.reward_model_path, env_name, args.loss_type)
+    learn_reward(reward_net, optimizer, training_data, cal_training_data, num_iter, l1_reg, args.reward_model_path, env_name, args.loss_type)
     # elif args.cgl_type=='lagrangian':
     #     optimizer = optim.SGD(reward_net.parameters(), lr=0.01)#, momentum=0.9)
     #     learn_reward_differential_combine(reward_net, optimizer, training_data, num_iter, l1_reg, args.reward_model_path, env_name)
