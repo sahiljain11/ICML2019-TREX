@@ -170,6 +170,7 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
     #print(training_data[0])
     cum_loss = 0.0
     gaze_reg = 0.5
+    scale = 0.001
 
     training_inputs, training_outputs, training_gaze = training_data
 
@@ -204,7 +205,7 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
                 writer.add_scalar('ranking_loss', loss.item(), k)
 
             # gaze loss
-            gaze_loss = CGL(training_gaze[i], conv_map_i, conv_map_j)
+            gaze_loss = scale*CGL(training_gaze[i], conv_map_i, conv_map_j)
             writer.add_scalar('CGL', gaze_loss.item(), k)
 
             if not cgl_only:
@@ -235,7 +236,7 @@ def lagrangian(loss1, loss2, eps, lamb):
     damp = damping * (eps-loss2.detach())
     return loss1 - (lamb-damp) * (eps-loss2*scale)
 
-def learn_reward_differential_combine(reward_network, optimizer, training_data, num_iter, l1_reg, checkpoint_dir):
+def learn_reward_differential_combine(reward_network, optimizer, training_data, num_iter, l1_reg, checkpoint_dir, env):
     #check if gpu available
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # Assume that we are on a CUDA machine, then this should print a CUDA device:
@@ -260,11 +261,13 @@ def learn_reward_differential_combine(reward_network, optimizer, training_data, 
     writer = SummaryWriter(tb_dir)
 
     # TODO: stop training when the loss stops changing too much
+    k=0
     for epoch in range(num_iter):
         np.random.shuffle(training_data)
         training_obs, training_labels, training_gaze = zip(*training_data)
 
         for i in range(len(training_labels)):
+            k+=1
             traj_i, traj_j = training_obs[i]
             labels = np.array([training_labels[i]])
             traj_i = np.array(traj_i)
