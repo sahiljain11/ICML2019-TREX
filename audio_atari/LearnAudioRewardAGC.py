@@ -266,7 +266,11 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
             # print('rewards_i size: ',rewards_i.nelement())
 
             for i in range(j*batch_size,min((j+1)*batch_size,len(training_data))):
-                traj_i, traj_j = training_obs[i]
+                # TODO: why is training_obs a valid variable here???
+                # print('obs:',len(training_obs[i][0]))
+                # print('data:',len(training_data[i][0]))
+                traj_i, traj_j = training_data[i]
+                # print(len(traj_i))
                 # labels = np.array([training_labels[i]])
                 traj_i = np.array(traj_i)
                 traj_j = np.array(traj_j)
@@ -274,7 +278,7 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
                 traj_j = torch.from_numpy(traj_j).float().to(device)
                 # labels = torch.from_numpy(labels).to(device)
 
-                #forward + backward + optimize
+                # forward + backward + optimize
                 # outputs, abs_rewards = reward_network.forward(traj_i, traj_j)
                 r_i, r_j = reward_network.forward(traj_i, traj_j)
                 # print('r_i shape:',r_i.shape)
@@ -289,6 +293,7 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
             # update loss to CAL for every batch
             # print(rewards_i.shape)
             loss = loss_criterion(rewards_i, rewards_j)
+            print('loss: ',loss)
             writer.add_scalar('CAL', loss.item(), k)
             # loss = loss_criterion(outputs, labels) + l1_reg * abs_rewards
             loss.backward()
@@ -328,10 +333,9 @@ if __name__=="__main__":
     parser.add_argument('--seed', default=0, help="random seed for experiments")
     parser.add_argument('--num_snippets', default=6000, help="number of snippets to train the reward network with")
     parser.add_argument('--data_dir', help="where agc data is located, e.g. path to atari_v1/")
-    # TODO: add Contrastive Audio Loss (CAL)
+
     # TODO: add Pairwise Ranking Loss on demo snippets which have audio
-    # TODO: add option to finetune, train from scratch, or continue training from a pretrained network
-    # TODO: option for auxiliary loss to standard TREX training
+    # TODO: add option to finetune, train from scratch, or continue training from a pretrained network (shrink and perturb)
 
     args = parser.parse_args()
     env_name = args.env_name
@@ -413,9 +417,9 @@ if __name__=="__main__":
     sorted_returns = sorted(learning_returns)
     print(sorted_returns)
     # training_obs, training_labels = create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env)
-    training_obs = create_CAL_training_data(demonstrations, audio, num_snippets)
+    training_data = create_CAL_training_data(demonstrations, audio, num_snippets)
     
-    print("num training_obs", len(training_obs))
+    print("num training_obs", len(training_data))
     # print("num_labels", len(training_labels))
     # Now we create a reward network and optimize it using the training data.
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -423,7 +427,7 @@ if __name__=="__main__":
     reward_net.to(device)
     
     optimizer = optim.Adam(reward_net.parameters(),  lr=lr, weight_decay=weight_decay)
-    learn_reward(reward_net, optimizer, training_obs, num_iter, l1_reg, args.reward_model_path, env_name)
+    learn_reward(reward_net, optimizer, training_data, num_iter, l1_reg, args.reward_model_path, env_name)
 
     reward_path = args.reward_model_path+'/'+env_name+'.params'
     torch.save(reward_net.state_dict(), reward_path)
