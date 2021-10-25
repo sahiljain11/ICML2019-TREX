@@ -109,9 +109,9 @@ if __name__=="__main__":
     #write returns to file
 
     #res = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    res = "./eval/" + env_name + checkpointpath.replace("/","_") + "_evaluation.txt"
+    res = "./eval/" + env_name + '_' + checkpointpath.replace("/","_") + "_evaluation.txt"
     val = 0.0
-    f = open("./eval/" + env_name + checkpointpath.replace("/","_") + "_evaluation.txt",'w')
+    f = open("./eval/" + env_name + '_'+ checkpointpath.replace("/","_") + "_evaluation.txt",'w')
     #f = open(f"./eval/{res}.txt", "w")
     for r in returns:
         f.write("{}\n".format(r))
