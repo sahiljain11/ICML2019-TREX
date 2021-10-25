@@ -67,7 +67,7 @@ def StackFrames(frames, annotations, heatmaps):
                 for j in range(i-3, i):
                     if annotations[j]['word'] != None:
                         ann = annotations[j]
-                        print(ann)
+                        # print(ann)
                         break
 
             anns.append(ann)
@@ -86,7 +86,7 @@ def get_sorted_traj_indices(env_name, dataset):
     traj_scores  = []
     traj_ann     = []
     traj_heatmap = []
-    print(dataset.trajectories.keys())
+    # print(dataset.trajectories.keys())
     for t in dataset.trajectories[g]:
         if env_name == "revenge":
             traj_indices.append(t)
