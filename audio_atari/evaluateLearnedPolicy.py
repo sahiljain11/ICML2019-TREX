@@ -121,8 +121,10 @@ if __name__=="__main__":
     print(f"Total: {val}")
     # print('Total: {}'.format(val))
     val = val / len(returns)
+    err = np.std(returns)/np.sqrt(len(returns))
     # print('Average: {}'.format(val))
     print(f"Average: {val}")
+    print(f"Std err: {err}")
 
     print(f"Stored results in {res}.txt")
     # print("Stored results in {}.txt".format(res))
