@@ -1,13 +1,14 @@
 # env_names = [['seaquest','Seaquest'],['spaceinvaders','SpaceInvaders'],['mspacman','MsPacman'],['enduro','Enduro'],['montezumarevenge','MontezumaRevenge']]
-# env = ['seaquest','Seaquest']
-env = ['spaceinvaders','SpaceInvaders']
+env = ['seaquest','Seaquest']
+# env = ['spaceinvaders','SpaceInvaders']
 # env = ['mspacman','MsPacman']
-server = 'titans' #'dgx'
+# server = 'titans' #'dgx'
+server = 'dgx'
 
-extra, extra_option = '_rl_cgl', 'rl_cgl'
+# extra, extra_option = '_rl_cgl', 'rl_cgl'
 # extra, extra_option = '_rl_cal', 'rl_cal'
 # extra, extra_option = '_cgl_cal', 'cgl_cal'
-# extra, extra_option = '_rl_cgl_cal', 'rl_cgl_cal'
+extra, extra_option = '_rl_cgl_cal', 'rl_cgl_cal'
 
 bash_file_name = 'reward/reward'+extra+'_'+env[0]+'.sh'
 f = open(bash_file_name,'w')

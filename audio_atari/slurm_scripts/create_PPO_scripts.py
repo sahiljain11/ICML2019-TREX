@@ -38,10 +38,10 @@ def write_script(args):
         f.write('#SBATCH --mail-type=END,FAIL,REQUEUE\n')
         f.write('#SBATCH --partition '+server+'\n')
         f.write('#SBATCH --nodes=1\n')
-        f.write('#SBATCH --ntasks-per-node=1\n')
+        f.write('#SBATCH --ntasks-per-node=2\n')
         f.write('#SBATCH --time 72:00:00\n')
         f.write('#SBATCH --gres=gpu:1\n')
-        f.write('#SBATCH --mem=30G\n')
+        f.write('#SBATCH --mem=40G\n')
         f.write('#SBATCH --cpus-per-task=4\n')
 
         # f.write('OPENAI_LOG_FORMAT=\'stdout,log,csv,tensorboard\' OPENAI_LOGDIR=ppo_models/'+env[0]+'_'+extra+seed+' python -m baselines.run --alg=ppo2 --env='+env[1]+'NoFrameskip-v4 --custom_reward pytorch --custom_reward_path '+reward_dir+env[0]+'.params --seed '+seed+' --num_timesteps=5e7 --save_interval=500 --num_env 9')
