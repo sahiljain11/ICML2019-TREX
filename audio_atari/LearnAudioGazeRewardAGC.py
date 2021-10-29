@@ -352,7 +352,9 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                 writer.add_scalar('CGL+CAL', loss.item(), k)
 
             elif loss_type=='rl_cgl_cal':
-                loss = (0.5)*loss + 0.25*audio_loss + 0.25*gaze_loss
+                # TODO: try other variations
+                # loss = (0.5)*loss + 0.25*audio_loss + 0.25*gaze_loss
+                loss = (0.5)*loss + 0.4*audio_loss + 0.1*gaze_loss
                 writer.add_scalar('RL+CGL+CAL', loss.item(), k)
 
             loss.backward()
