@@ -254,7 +254,8 @@ def CGL(training_gaze, conv_map_i, conv_map_j):
 
 
 
-def learn_reward(reward_network, optimizer, training_data, cal_training_data, num_iter, l1_reg, checkpoint_dir, env, loss_type):
+def learn_reward(reward_network, optimizer, training_data, cal_training_data, num_iter, l1_reg, checkpoint_dir, env, \
+    loss_type, rl_mul=0.5, gaze_mul=0.25, audio_mul=0.25):
 
     #check if gpu available
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -352,9 +353,8 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                 writer.add_scalar('CGL+CAL', loss.item(), k)
 
             elif loss_type=='rl_cgl_cal':
-                # TODO: try other variations
                 # loss = (0.5)*loss + 0.25*audio_loss + 0.25*gaze_loss
-                loss = (0.5)*loss + 0.4*audio_loss + 0.1*gaze_loss
+                loss = (rl_mul*loss) + (audio_mul*audio_loss) + (gaze_mul*gaze_loss)
                 writer.add_scalar('RL+CGL+CAL', loss.item(), k)
 
             loss.backward()
@@ -429,11 +429,18 @@ if __name__=="__main__":
     parser.add_argument('--data_dir', help="where agc data is located, e.g. path to atari_v1/")
     parser.add_argument('--num_snippets', default=6000, help="number of snippets to train the reward network with")
     parser.add_argument('--loss_type',default='rl_cgl_cal',type=str,help='losses to consider [rl, rl_cgl, rl_cal, cgl_cal, rl_cgl_cal]')
+    parser.add_argument('--rl_mul', default=0.5, help="weight for ranking loss")
+    parser.add_argument('--audio_mul', default=0.25, help="weight for audio loss")
+    parser.add_argument('--gaze_mul', default=0.25, help="weight for gaze loss")
+
     # parser.add_argument('--gaze_loss_only', action='store_true')
     # parser.add_argument('--audio_loss_only', action='store_true')
     # parser.add_argument('--cgl_type',default='basic',type=str,help='way to combine cgl loss with pairwise ranking loss [basic, lagrangian]')
 
     args = parser.parse_args()
+    # print(float(args.rl_mul)+float(args.gaze_mul)+float(args.audio_mul))
+    assert(float(args.rl_mul)+float(args.gaze_mul)+float(args.audio_mul)==1.0)
+
     env_name = args.env_name
     if env_name == "spaceinvaders":
         env_id = "SpaceInvadersNoFrameskip-v4"
@@ -525,7 +532,8 @@ if __name__=="__main__":
     
     # if args.cgl_type=='basic' or args.gaze_loss_only:
     optimizer = optim.Adam(reward_net.parameters(),  lr=lr, weight_decay=weight_decay)
-    learn_reward(reward_net, optimizer, training_data, cal_training_data, num_iter, l1_reg, args.reward_model_path, env_name, args.loss_type)
+    learn_reward(reward_net, optimizer, training_data, cal_training_data, num_iter, l1_reg, args.reward_model_path, \
+        env_name, args.loss_type, float(args.rl_mul), float(args.gaze_mul), float(args.audio_mul))
     # elif args.cgl_type=='lagrangian':
     #     optimizer = optim.SGD(reward_net.parameters(), lr=0.01)#, momentum=0.9)
     #     learn_reward_differential_combine(reward_net, optimizer, training_data, num_iter, l1_reg, args.reward_model_path, env_name)

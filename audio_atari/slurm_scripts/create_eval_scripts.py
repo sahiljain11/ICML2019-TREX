@@ -1,6 +1,6 @@
 # env_names = [['seaquest','Seaquest'],['spaceinvaders','SpaceInvaders'],['mspacman','MsPacman'],['enduro','Enduro'],['montezumarevenge','MontezumaRevenge']]
-env = ['seaquest','Seaquest']
-# env = ['spaceinvaders','SpaceInvaders']
+# env = ['seaquest','Seaquest']
+env = ['spaceinvaders','SpaceInvaders']
 # env = ['mspacman','MsPacman']
 # env = ['enduro','Enduro']
 # env = ['montezumarevenge','MontezumaRevenge']
@@ -11,9 +11,10 @@ seeds = ['0','1','2']
 # extra = '_cal'
 # extra = '_rl_cgl'
 # extra = '_cgl'
-extra = '_rl_cal'
+# extra = '_rl_cal'
 # extra = '_rl_cgl_cal'
 # extra = '_cgl_cal'
+extra = '_rl_cgl_cal_0.5-0.1-0.4'
 
 for seed in seeds:
     bash_file_name = 'eval/eval_'+env[0]+extra+'_'+seed+'.sh'
