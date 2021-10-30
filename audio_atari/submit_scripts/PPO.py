@@ -21,15 +21,6 @@ def get_job(seed, exp, env):
     build your shell script here.
     """
 
-    if exp=='':
-        reward_dir = 'learned_reward_models/'
-    elif exp=='cal':
-        reward_dir = 'multimodal_reward_models/'+env[0]+'_CAL_only/'
-    elif exp=='cgl':
-        reward_dir = 'multimodal_reward_models/'+env[0]+'_CGL_only/'
-    else:
-        reward_dir = './multimodal_reward_models/'+env[0]+exp+'/'
-
     if env=='mspacman':
         env_id = 'MsPacman'
     if env=='seaquest':
@@ -38,6 +29,16 @@ def get_job(seed, exp, env):
         env_id = 'SpaceInvaders'
 
     extra = '_'+exp
+
+    if exp=='':
+        reward_dir = 'learned_reward_models/'
+    elif exp=='cal':
+        reward_dir = 'multimodal_reward_models/'+env+'_CAL_only/'
+    elif exp=='cgl':
+        reward_dir = 'multimodal_reward_models/'+env+'_CGL_only/'
+    else:
+        reward_dir = './multimodal_reward_models/'+env+extra+'/'
+
 
     shell_script_str = TEMPLATE
     shell_script_str += f'{env}'
