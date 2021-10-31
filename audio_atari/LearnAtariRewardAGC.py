@@ -309,7 +309,7 @@ if __name__=="__main__":
 
     data_dir = args.data_dir
     dataset = ds.AtariDataset(data_dir)
-    demonstrations, learning_returns, human_ann, human_heatmap = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, env_name)
+    demonstrations, learning_returns, human_ann, human_heatmap, pase = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, env_name)
 
     demo_lengths = [len(d) for d in demonstrations]
     print("demo lengths", demo_lengths)
