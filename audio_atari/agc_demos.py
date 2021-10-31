@@ -19,7 +19,7 @@ def GrayScaleWarpImage(image):
     #frame = np.expand_dims(frame, -1)
     return frame
 
-def MaxSkipAndWarpFrames(trajectory_dir, annotations, heatmaps, pase_vecs):
+def MaxSkipAndWarpFrames(trajectory_dir, annotations, heatmaps, pase_vecs, raw_pase):
     """take a trajectory file of frames and max over every 3rd and 4th observation"""
     num_frames = len(listdir(trajectory_dir))
     skip=4
@@ -32,6 +32,7 @@ def MaxSkipAndWarpFrames(trajectory_dir, annotations, heatmaps, pase_vecs):
     anns = []
     maps = []
     pase = []
+    raw  = []
     for i in range(num_frames):
         if i % skip == skip - 2:
             obs = cv2.imread(path.join(trajectory_dir, str(i) + ".png"))
@@ -47,9 +48,10 @@ def MaxSkipAndWarpFrames(trajectory_dir, annotations, heatmaps, pase_vecs):
             anns.append(annotations[i])
             maps.append(heatmaps[i])
             pase.append(pase_vecs[i])
-    return max_frames, anns, maps, pase
+            raw.append(raw_pase[i])
+    return max_frames, anns, maps, pase, raw
 
-def StackFrames(frames, annotations, heatmaps, pase_vecs):
+def StackFrames(frames, annotations, heatmaps, pase_vecs, raw_pase):
     import copy
     """stack every four frames to make an observation (84,84,4)"""
     stacked = []
@@ -57,6 +59,7 @@ def StackFrames(frames, annotations, heatmaps, pase_vecs):
     anns = []
     maps = []
     pase = []
+    raw  = []
     for i in range(len(frames)):
         if i >= 3:
             stacked_obs[:,:,0] = frames[i-3]
@@ -76,7 +79,8 @@ def StackFrames(frames, annotations, heatmaps, pase_vecs):
             anns.append(ann)
             maps.append(heatmaps[i])
             pase.append(pase_vecs[i])
-    return stacked, anns, maps, pase
+            raw.append(raw_pase[i])
+    return stacked, anns, maps, pase, raw
 
 
 
@@ -107,7 +111,8 @@ def get_sorted_traj_indices(env_name, dataset):
 
     annotations = dataset.annotations[g]
     heatmaps    = dataset.heatmap[g]
-    pase        = dataset.pase[g]
+    pase        = dataset.pasevec[g]
+    raw_pase    = dataset.rawpase[g]
 
     sorted_traj_indices = [x for _, x in sorted(zip(traj_scores, traj_indices), key=lambda pair: pair[0])]
     sorted_traj_scores = sorted(traj_scores)
@@ -158,7 +163,7 @@ def get_sorted_traj_indices(env_name, dataset):
     #print("(index, score) pairs:", len(demos))
     #return demos
     print("(index, score) pairs:", len(non_duplicates))
-    return non_duplicates, annotations, heatmaps, pase
+    return non_duplicates, annotations, heatmaps, pase, raw_pase
 
 def get_preprocessed_trajectories(env_name, dataset, data_dir, preprocess_name):
     """returns an array of trajectories corresponding to what you would get running checkpoints from PPO
@@ -168,19 +173,20 @@ def get_preprocessed_trajectories(env_name, dataset, data_dir, preprocess_name):
 
    
     print("generating human demos for", env_name)
-    demos, annotations, heatmaps, pase = get_sorted_traj_indices(env_name, dataset)
+    demos, annotations, heatmaps, pase, raw_pase = get_sorted_traj_indices(env_name, dataset)
 
-    human_scores  = []
-    human_demos   = []
-    human_ann     = []
-    human_heatmap = []
-    human_pase    = []
+    human_scores   = []
+    human_demos    = []
+    human_ann      = []
+    human_heatmap  = []
+    human_pase     = []
+    human_raw_pase = []
     for indx, score, _, _ in demos:
         human_scores.append(score)
         traj_dir = path.join(data_dir, 'screens', env_name, str(indx))
         #print("generating traj from", traj_dir)
-        maxed_traj, filtered_ann, filtered_heatmap, filtered_pase = MaxSkipAndWarpFrames(traj_dir, annotations[indx], heatmaps[indx], pase[indx])
-        stacked_traj, filtered_ann, filtered_heatmap, filtered_pase = StackFrames(maxed_traj, filtered_ann, filtered_heatmap, filtered_pase)
+        maxed_traj, filtered_ann, filtered_heatmap, filtered_pase, filtered_raw_pase = MaxSkipAndWarpFrames(traj_dir, annotations[indx], heatmaps[indx], pase[indx], raw_pase[indx])
+        stacked_traj, filtered_ann, filtered_heatmap, filtered_pase, filtered_raw_pase = StackFrames(maxed_traj, filtered_ann, filtered_heatmap, filtered_pase, filtered_raw_pase)
         demo_norm_mask = []
         #normalize values to be between 0 and 1 and have top part masked
         for ob in stacked_traj:
@@ -188,7 +194,8 @@ def get_preprocessed_trajectories(env_name, dataset, data_dir, preprocess_name):
         human_demos.append(demo_norm_mask)
         human_ann.append(filtered_ann)
         human_heatmap.append(filtered_heatmap)
-        human_pase.append(human_pase)
+        human_pase.append(filtered_pase)
+        human_raw_pase.append(filtered_raw_pase)
     return human_demos, human_scores, human_ann, human_heatmap, human_pase
 
 
