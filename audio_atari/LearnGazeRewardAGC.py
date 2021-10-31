@@ -10,26 +10,15 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
 from run_test import *
 
 import os
 
 from gaze.coverage import *
+from tensorboardX import SummaryWriter
 
-"""
-python LearnAtariRewardAGC.py --env_name mspacman --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/mspacman.params
-python LearnAtariRewardAGC.py --env_name spaceinvaders --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/spaceinvaders0.params --seed 0
-"""
 
-'''
-To train on a reward network, use the following command:
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs python -m baselines.run --alg=ppo2 --env=MsPacmanNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/mspacman.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space00 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders0.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space01 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders0.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space10 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space11 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
-'''
 
 def create_training_data(demonstrations, gaze_maps, num_snippets, min_snippet_length, max_snippet_length):
     #collect training data
@@ -115,14 +104,15 @@ class Net(nn.Module):
         conv_map_traj = []
         conv_map_stacked = torch.tensor([[]]) # 26,11,9,7 (size of conv layers)
 
-        gaze_conv = x4
-        conv_map = gaze_conv
+        conv_map = x4
+        # print('conv map: ',conv_map.shape)
 
         # 1x1 convolution followed by softmax to get collapsed and normalized conv output
         norm_operator = nn.Conv2d(16, 1, kernel_size=1, stride=1)
         if torch.cuda.is_available():
             norm_operator.cuda()
-        attn_map = norm_operator(torch.squeeze(conv_map))
+        # attn_map = norm_operator(torch.squeeze(conv_map))
+        attn_map = norm_operator(conv_map)
 
         conv_map_traj.append(attn_map)
         conv_map_stacked = torch.stack(conv_map_traj)
@@ -162,27 +152,36 @@ def CGL(training_gaze, conv_map_i, conv_map_j):
 
 
 
-def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, checkpoint_dir):
+def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, checkpoint_dir, env, cgl_only):
 
     #check if gpu available
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # Assume that we are on a CUDA machine, then this should print a CUDA device:
     print(device)
 
+    reward_path = checkpoint_dir+'/'+env+'.params'
+    tb_dir = os.path.join(checkpoint_dir,'tb/')
+    if not os.path.isdir(tb_dir):
+        os.makedirs(tb_dir)
+    writer = SummaryWriter(tb_dir)
+
+
     loss_criterion = nn.CrossEntropyLoss()
     #print(training_data[0])
     cum_loss = 0.0
     gaze_reg = 0.5
+    scale = 0.001
 
     training_inputs, training_outputs, training_gaze = training_data
 
     training_data = list(zip(training_inputs, training_outputs, training_gaze))
-
+    k = 0
     for epoch in range(num_iter):
         np.random.shuffle(training_data)
         training_obs, training_labels, training_gaze = zip(*training_data)
 
         for i in range(len(training_labels)):
+            k+=1
             traj_i, traj_j = training_obs[i]
             labels = np.array([training_labels[i]])
             traj_i = np.array(traj_i)
@@ -201,11 +200,19 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
             outputs = outputs.unsqueeze(0)
             #print("outputs", outputs)
             #print("labels", labels)
-            loss = loss_criterion(outputs, labels) + l1_reg * abs_rewards
+            if not cgl_only:
+                loss = loss_criterion(outputs, labels) + l1_reg * abs_rewards
+                writer.add_scalar('ranking_loss', loss.item(), k)
 
             # gaze loss
-            gaze_loss = CGL(training_gaze[i], conv_map_i, conv_map_j)
-            loss = (1-gaze_reg)*loss + gaze_reg * gaze_loss
+            gaze_loss = scale*CGL(training_gaze[i], conv_map_i, conv_map_j)
+            writer.add_scalar('CGL', gaze_loss.item(), k)
+
+            if not cgl_only:
+                loss = (1-gaze_reg)*loss + gaze_reg * gaze_loss
+                writer.add_scalar('total_loss', loss.item(), k)
+            else:
+                loss = gaze_loss
 
             loss.backward()
             optimizer.step()
@@ -218,18 +225,18 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
                 print("epoch {}:{} loss {}".format(epoch,i, cum_loss))
                 print(f"abs_rewards: {abs_rewards.item()}\n")
                 cum_loss = 0.0
-                torch.save(reward_net.state_dict(), checkpoint_dir)
+                torch.save(reward_net.state_dict(), reward_path)
     print("finished training")
-
-
+    writer.close()
 
 
 def lagrangian(loss1, loss2, eps, lamb):
     damping = 10.0
+    scale = 0.001
     damp = damping * (eps-loss2.detach())
-    return loss1 - (lamb-damp) * (eps-loss2)
+    return loss1 - (lamb-damp) * (eps-loss2*scale)
 
-def learn_reward_differential_combine(reward_network, optimizer, training_data, num_iter, l1_reg, checkpoint_dir):
+def learn_reward_differential_combine(reward_network, optimizer, training_data, num_iter, l1_reg, checkpoint_dir, env):
     #check if gpu available
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # Assume that we are on a CUDA machine, then this should print a CUDA device:
@@ -238,16 +245,29 @@ def learn_reward_differential_combine(reward_network, optimizer, training_data, 
     loss_criterion = nn.CrossEntropyLoss()
     #print(training_data[0])
     cum_loss = 0.0
-    gaze_reg = 0.5
+    # gaze_reg = 0.5
+    lamb = torch.tensor(0.0, device=device)
+    lamb.requires_grad = True
+
+    eps = 0.05
 
     training_inputs, training_outputs, training_gaze = training_data
     training_data = list(zip(training_inputs, training_outputs, training_gaze))
 
+    reward_path = checkpoint_dir+'/'+env+'.params'
+    tb_dir = os.path.join(checkpoint_dir,'tb/')
+    if not os.path.isdir(tb_dir):
+        os.makedirs(tb_dir)
+    writer = SummaryWriter(tb_dir)
+
+    # TODO: stop training when the loss stops changing too much
+    k=0
     for epoch in range(num_iter):
         np.random.shuffle(training_data)
         training_obs, training_labels, training_gaze = zip(*training_data)
 
         for i in range(len(training_labels)):
+            k+=1
             traj_i, traj_j = training_obs[i]
             labels = np.array([training_labels[i]])
             traj_i = np.array(traj_i)
@@ -267,19 +287,31 @@ def learn_reward_differential_combine(reward_network, optimizer, training_data, 
             #print("outputs", outputs)
             #print("labels", labels)
             loss = loss_criterion(outputs, labels) + l1_reg * abs_rewards
+            writer.add_scalar('ranking_loss', loss.item(), k)
 
             # gaze loss
             gaze_loss = CGL(training_gaze[i], conv_map_i, conv_map_j)
-            lamb = 0.0
-            eps = 0.7
+            writer.add_scalar('CGL', gaze_loss.item(), k)
+            print('TREX loss: {}, CGL loss: {}'.format(loss,gaze_loss))
+            
             # loss = (1-gaze_reg)*loss + gaze_reg * gaze_loss
             loss = lagrangian(loss, gaze_loss, eps, lamb)
+            writer.add_scalar('lagrangian_loss', gaze_loss.item(), k)
 
             loss.backward()
             optimizer.step()
 
             # check if lambda is updated by step function
-            print(lamb)
+            # print('lambda',lamb, lamb.grad)
+
+            # update lambda
+            with torch.no_grad():
+                lamb += 0.01*lamb.grad
+                # print('lambda',lamb, lamb.grad)
+
+                lamb.grad.zero_()
+                # print('lambda',lamb, lamb.grad)
+                print('lambda: {}'.format(lamb))
 
             #print stats to see if learning
             item_loss = loss.item()
@@ -289,13 +321,14 @@ def learn_reward_differential_combine(reward_network, optimizer, training_data, 
                 print("epoch {}:{} loss {}".format(epoch,i, cum_loss))
                 print(f"abs_rewards: {abs_rewards.item()}\n")
                 cum_loss = 0.0
-                torch.save(reward_net.state_dict(), checkpoint_dir)
+                torch.save(reward_net.state_dict(), reward_path)
 
     print("finished training")
+    writer.close()
 
 def calc_accuracy(reward_network, training_inputs, training_outputs):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    loss_criterion = nn.CrossEntropyLoss()
+    # loss_criterion = nn.CrossEntropyLoss()
     #print(training_data[0])
     num_correct = 0.
     with torch.no_grad():
@@ -310,7 +343,7 @@ def calc_accuracy(reward_network, training_inputs, training_outputs):
             traj_j = torch.from_numpy(traj_j).float().to(device)
 
             #forward to get logits
-            outputs, abs_return = reward_network.forward(traj_i, traj_j)
+            outputs, abs_return,_,_ = reward_network.forward(traj_i, traj_j)
             #print(outputs)
             _, pred_label = torch.max(outputs,0)
             #print(pred_label)
@@ -340,6 +373,9 @@ if __name__=="__main__":
     parser.add_argument('--reward_model_path', default='', help="name and location for learned model params")
     parser.add_argument('--seed', default=0, help="random seed for experiments")
     parser.add_argument('--data_dir', help="where agc data is located, e.g. path to atari_v1/")
+    parser.add_argument('--num_snippets', default=6000, help="number of snippets to train the reward network with")
+    parser.add_argument('--gaze_loss_only', action='store_true')
+    parser.add_argument('--cgl_type',default='basic',type=str,help='way to combine cgl loss with pairwise ranking loss [basic, lagrangian]')
 
     args = parser.parse_args()
     env_name = args.env_name
@@ -427,12 +463,16 @@ if __name__=="__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     reward_net = Net()
     reward_net.to(device)
-    import torch.optim as optim
-    optimizer = optim.Adam(reward_net.parameters(),  lr=lr, weight_decay=weight_decay)
-    learn_reward(reward_net, optimizer, training_data, num_iter, l1_reg, args.reward_model_path)
     
+    if args.cgl_type=='basic' or args.gaze_loss_only:
+        optimizer = optim.Adam(reward_net.parameters(),  lr=lr, weight_decay=weight_decay)
+        learn_reward(reward_net, optimizer, training_data, num_iter, l1_reg, args.reward_model_path, env_name, args.gaze_loss_only)
+    elif args.cgl_type=='lagrangian':
+        optimizer = optim.SGD(reward_net.parameters(), lr=0.01)#, momentum=0.9)
+        learn_reward_differential_combine(reward_net, optimizer, training_data, num_iter, l1_reg, args.reward_model_path, env_name)
 
-    torch.save(reward_net.state_dict(), args.reward_model_path)
+    reward_path = args.reward_model_path+'/'+env_name+'.params'
+    torch.save(reward_net.state_dict(), reward_path)
 
     with torch.no_grad():
         pred_returns = [predict_traj_return(reward_net, traj) for traj in demonstrations]
@@ -440,6 +480,5 @@ if __name__=="__main__":
         print(i,p,sorted_returns[i])
 
     print("accuracy", calc_accuracy(reward_net, training_obs, training_labels))
-
 
     print(f"Total time: {time.time() - start}")

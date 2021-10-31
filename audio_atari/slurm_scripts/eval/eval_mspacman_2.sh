@@ -5,7 +5,7 @@
 #SBATCH --error=logs/eval_mspacman_2_%j.err
 #SBATCH --mail-user=akankshasaran@utexas.edu
 #SBATCH --mail-type=END,FAIL,REQUEUE
-#SBATCH --partition dgx
+#SBATCH --partition titans
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --time 72:00:00

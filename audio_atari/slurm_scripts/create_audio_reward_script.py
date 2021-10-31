@@ -1,14 +1,21 @@
+
 # env_names = [['seaquest','Seaquest'],['spaceinvaders','SpaceInvaders'],['mspacman','MsPacman'],['enduro','Enduro'],['montezumarevenge','MontezumaRevenge']]
 env = ['seaquest','Seaquest']
-server = 'titans' #'dgx'
+# env = ['spaceinvaders','SpaceInvaders']
+# env = ['mspacman','MsPacman']
+# env = ['enduro','Enduro']
+# env = ['montezumarevenge','MontezumaRevenge']
 
-bash_file_name = 'reward/reward_'+env[0]+'.sh'
+server = 'titans' 
+# server = 'dgx'
+
+bash_file_name = 'reward/reward_CAL_'+env[0]+'.sh'
 f = open(bash_file_name,'w')
 f.write("#!/bin/bash\n\n")
 
-f.write('#SBATCH --job-name reward_'+env[0]+'\n')
-f.write('#SBATCH --output=logs/reward_'+env[0]+'_%j.out\n')
-f.write('#SBATCH --error=logs/reward_'+env[0]+'_%j.err\n')
+f.write('#SBATCH --job-name reward_cal_'+env[0]+'\n')
+f.write('#SBATCH --output=logs/reward_cal_'+env[0]+'_%j.out\n')
+f.write('#SBATCH --error=logs/reward_cal_'+env[0]+'_%j.err\n')
 f.write('#SBATCH --mail-user=akankshasaran@utexas.edu\n')
 f.write('#SBATCH --mail-type=END,FAIL,REQUEUE\n')
 f.write('#SBATCH --partition '+server+'\n')
@@ -19,6 +26,6 @@ f.write('#SBATCH --gres=gpu:1\n')
 f.write('#SBATCH --mem=20G\n')
 f.write('#SBATCH --cpus-per-task=4\n')
 
-f.write('python LearnAtariRewardAGC.py --env_name '+env[0]+' --data_dir ./frames --reward_model_path ./learned_reward_models/'+env[0]+'.params')
+f.write('python LearnAudioRewardAGC.py --env_name '+env[0]+' --data_dir ./frames --reward_model_path ./multimodal_reward_models/'+env[0]+'_CAL_only')
       
 f.close()
