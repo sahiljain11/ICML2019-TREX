@@ -3,7 +3,7 @@ import agc_demos
 import agc.dataset as ds
 
 import pickle
-from audio.contrastive_loss import ContrastiveSingleLoss
+from audio.contrastive_loss import ContrastiveLoss
 import gym
 import time
 import numpy as np
@@ -86,7 +86,6 @@ def create_CAL_training_data(demonstrations, audio, num_snippets):
     # fine tune with this small set
 
     snippet_pairs = []
-    batch_size = 16
 
     # max_traj_length = 0
     # training_obs = []
@@ -141,14 +140,11 @@ def create_CAL_training_data(demonstrations, audio, num_snippets):
     print('yes utterances: ', len(yes_indices))
     print('no utterances: ', len(no_indices))
 
-    num_batches = int(num_snippets/batch_size)
-
     #fixed size snippets
-    for n in range(num_batches):
+    for n in range(num_snippets):
         ti, tj = 0, 0
         label_len_i, label_len_j = 0,0
-    
-        batch = []
+
         #pick two random demonstrations (could be the same demo)
         while(label_len_i==0 or label_len_j==0):
             ti = np.random.randint(num_demos)
@@ -156,82 +152,39 @@ def create_CAL_training_data(demonstrations, audio, num_snippets):
 
             # randomly pick yes/no
             label = np.random.randint(2)
-            neg_label = 1-label
-            assert((neg_label==0 or neg_label==1) and neg_label!=label)
 
             label_len_i, label_len_j = len(indices[label][ti]), len(indices[label][tj])
-            
 
         # randomly pick corresponding index pair from ti, tj
         snippet_id_i, snippet_id_j = np.random.randint(label_len_i), np.random.randint(label_len_j)
         ti_start, ti_stop = indices[label][ti][snippet_id_i][0], indices[label][ti][snippet_id_i][1]
         tj_start, tj_stop = indices[label][tj][snippet_id_j][0], indices[label][tj][snippet_id_j][1]
 
+
+        #print(ti, tj)
+        #create random snippets
+        #find min length of both demos to ensure we can pick a demo no earlier than that chosen in worse preferred demo
+        # rand_length = np.random.randint(min_snippet_length, max_snippet_length)
+
+        # ti_start = np.random.randint(min_length - rand_length + 1)
+        #print(ti_start, len(demonstrations[tj]))
         left = np.random.randint(int(left_offset*fr))
         right = np.random.randint(int(right_offset*fr))
-        ti_start_offset = max(0,ti_start-left)
-        ti_stop_offset = min(ti_stop+right,len(demonstrations[ti]))
+        ti_start = max(0,ti_start-left)
+        ti_stop = min(ti_stop+right,len(demonstrations[ti]))
+        # TODO: change the start point to be randomly selected from the left of the actual start
+        ti_start = np.random.randint(ti_start, ti_stop)
 
-        # start point randomly selected from the left of the actual start
-        ti_start = np.random.randint(ti_start_offset, ti_start+1)
-        ti_stop = np.random.randint(ti_stop, ti_stop_offset+1)
-
-
-        tj_start_offset = max(0,tj_start-left)
-        tj_stop_offset = min(tj_stop+right,len(demonstrations[tj]))
-
-        # start point randomly selected from the left of the actual start
-        tj_start = np.random.randint(tj_start_offset, tj_start+1)
-        tj_stop = np.random.randint(tj_stop, tj_stop_offset+1)
+        tj_start = max(0,tj_start-left)
+        tj_stop = min(tj_stop+right,len(demonstrations[tj]))
+        # TODO: change the start point to be randomly selected from the left of the actual start
+        tj_start = np.random.randint(tj_start, tj_stop)
 
         #print("start", ti_start, tj_start)
         traj_i = demonstrations[ti][ti_start:ti_stop] 
         traj_j = demonstrations[tj][tj_start:tj_stop]
     
-        batch.append((traj_i,traj_j))
-
-        for k in range(batch_size-1):
-            ti, tj = 0, 0
-            neg_label_len_i, neg_label_len_j = 0,0
-            # randomly select any demo pair
-            while(neg_label_len_i==0 or neg_label_len_j==0):
-                ti = np.random.randint(num_demos)
-                tj = np.random.randint(num_demos)
-
-                neg_label_len_i, neg_label_len_j = len(indices[neg_label][ti]), len(indices[neg_label][tj])
-
-
-            # randomly pick corresponding index pair from ti, tj
-            snippet_id_i, snippet_id_j = np.random.randint(neg_label_len_i), np.random.randint(neg_label_len_j)
-            ti_start, ti_stop = indices[neg_label][ti][snippet_id_i][0], indices[neg_label][ti][snippet_id_i][1]
-            tj_start, tj_stop = indices[neg_label][tj][snippet_id_j][0], indices[neg_label][tj][snippet_id_j][1]
-
-            left = np.random.randint(int(left_offset*fr))
-            right = np.random.randint(int(right_offset*fr))
-            ti_start_offset = max(0,ti_start-left)
-            ti_stop_offset = min(ti_stop+right,len(demonstrations[ti]))
-
-            # start point randomly selected from the left of the actual start
-            ti_start = np.random.randint(ti_start_offset, ti_start+1)
-            # print(ti_stop,ti_stop_offset)
-            ti_stop = np.random.randint(ti_stop, ti_stop_offset+1)
-
-
-            tj_start_offset = max(0,tj_start-left)
-            tj_stop_offset = min(tj_stop+right,len(demonstrations[tj]))
-
-            # start point randomly selected from the left of the actual start
-            tj_start = np.random.randint(tj_start_offset, tj_start+1)
-            tj_stop = np.random.randint(tj_stop, tj_stop_offset+1)
-
-            #print("start", ti_start, tj_start)
-            traj_i = demonstrations[ti][ti_start:ti_stop] 
-            traj_j = demonstrations[tj][tj_start:tj_stop]
-
-            batch.append((traj_i,traj_j))
-
-
-        snippet_pairs.append(batch)
+        snippet_pairs.append((traj_i,traj_j))
 
     print('snippet pairs: ', len(snippet_pairs))
     # TODO: separate out yes snippet pairs, no snippet pairs
@@ -297,12 +250,11 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
     writer = SummaryWriter(tb_dir)
 
     cum_loss = 0.0
-    batch_size = 16
-    num_batches = len(training_data)
-    # num_batches = int(len(training_data)/batch_size)
+    batch_size = 32
+    num_batches = int(len(training_data)/batch_size)
     # training_data = list(zip(training_inputs, training_outputs))
 
-    loss_criterion = ContrastiveSingleLoss(batch_size)
+    loss_criterion = ContrastiveLoss(batch_size)
     k = 0
     for epoch in range(num_iter):
         np.random.shuffle(training_data)
@@ -318,27 +270,24 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
             # print('rewards_i shape: ',rewards_i.shape)
             # print('rewards_i size: ',rewards_i.nelement())
 
-            # for i in range(j*batch_size,min((j+1)*batch_size,len(training_data))):
+            for i in range(j*batch_size,min((j+1)*batch_size,len(training_data))):
                 # print('obs:',len(training_obs[i][0]))
                 # print('data:',len(training_data[i][0]))
 
-            # TODO: traj_i, traj_j will be a batch of size 16
-            # TODO: loop through pairs in the batch for forward pass
-            batch = training_data[j]
-            for b in batch:
-            # print(len(traj_i))
+                # TODO: traj_i, traj_j will be a batch of size 16
+                # TODO: loop through pairs in the batch for forward pass
+                traj_i, traj_j = training_data[i]
+                # print(len(traj_i))
                 # labels = np.array([training_labels[i]])
-                ti, tj = b
-
-                ti = np.array(ti)
-                tj = np.array(tj)
-                ti = torch.from_numpy(ti).float().to(device)
-                tj = torch.from_numpy(tj).float().to(device)
+                traj_i = np.array(traj_i)
+                traj_j = np.array(traj_j)
+                traj_i = torch.from_numpy(traj_i).float().to(device)
+                traj_j = torch.from_numpy(traj_j).float().to(device)
                 # labels = torch.from_numpy(labels).to(device)
 
                 # forward + backward + optimize
                 # outputs, abs_rewards = reward_network.forward(traj_i, traj_j)
-                r_i, r_j = reward_network.forward(ti, tj)
+                r_i, r_j = reward_network.forward(traj_i, traj_j)
                 # print('r_i shape:',r_i.shape)
 
                 # rewards_i.append([r_i.item()])
@@ -456,7 +405,7 @@ if __name__=="__main__":
 
     data_dir = args.data_dir
     dataset = ds.AtariDataset(data_dir)
-    demonstrations, learning_returns, human_ann, human_heatmap, pase  = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, env_name)
+    demonstrations, learning_returns, human_ann, human_heatmap  = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, env_name)
     # print(human_ann)
 
     demo_lengths = [len(d) for d in demonstrations]
