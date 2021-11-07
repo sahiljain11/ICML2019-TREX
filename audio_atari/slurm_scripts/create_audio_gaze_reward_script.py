@@ -1,14 +1,15 @@
 # env_names = [['seaquest','Seaquest'],['spaceinvaders','SpaceInvaders'],['mspacman','MsPacman'],['enduro','Enduro'],['montezumarevenge','MontezumaRevenge']]
 # env = ['seaquest','Seaquest']
-env = ['spaceinvaders','SpaceInvaders']
-# env = ['mspacman','MsPacman']
+# env = ['spaceinvaders','SpaceInvaders']
+env = ['mspacman','MsPacman']
 # server = 'titans' #'dgx'
 server = 'dgx'
 
-rl_mul, gaze_mul, audio_mul = '0.35', '0.05', '0.6'
+# rl_mul, gaze_mul, audio_mul = '0.35', '0.05', '0.6'
 # rl_mul, gaze_mul, audio_mul = '0.1', '0.45', '0.45'
 # rl_mul, gaze_mul, audio_mul = '0.4', '0.2', '0.4'
 # rl_mul, gaze_mul, audio_mul = '0.1', '0.8', '0.1'
+rl_mul, gaze_mul, audio_mul = '0.9', '0.05', '0.05'
 
 # extra, extra_option = '_rl_cgl', 'rl_cgl'
 # extra, extra_option = '_rl_cal', 'rl_cal'

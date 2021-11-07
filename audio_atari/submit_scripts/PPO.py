@@ -10,7 +10,7 @@ OPENAI_LOG_FORMAT=\'stdout,log,csv,tensorboard\' OPENAI_LOGDIR=ppo_models/"""
 # Defines a grid search over these parameters.
 PARAMS = {
     'seed': [0,1,2],
-    'exp': ['rl_cgl_cal_0.5-0.1-0.4'],
+    'exp': ['rl_cgl_cal_0.9-0.05-0.05'],
     # 'exp': ['cal', 'cgl', 'rl_cal', 'rl_cgl', 'cgl_cal', 'rl_cgl_cal'],
     'env': ['mspacman','spaceinvaders','seaquest'],
 }
