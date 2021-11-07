@@ -196,7 +196,7 @@ def get_preprocessed_trajectories(env_name, dataset, data_dir, preprocess_name):
         human_heatmap.append(filtered_heatmap)
         human_pase.append(filtered_pase)
         human_raw_pase.append(filtered_raw_pase)
-    return human_demos, human_scores, human_ann, human_heatmap, human_pase
+    return human_demos, human_scores, human_ann, human_heatmap, human_pase, human_raw_pase
 
 
 if __name__ == "__main__":
