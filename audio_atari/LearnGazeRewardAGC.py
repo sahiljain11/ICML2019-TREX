@@ -53,7 +53,7 @@ def create_training_data(demonstrations, gaze_maps, num_snippets, min_snippet_le
         traj_j = demonstrations[tj][tj_start:tj_start+rand_length:2]
 
         gaze_i = gaze_maps[ti][ti_start:ti_start+rand_length:2]
-        gaze_j = gaze_maps[ti][ti_start:ti_start+rand_length:2]
+        gaze_j = gaze_maps[tj][tj_start:tj_start+rand_length:2]
 
         # print(gaze_i)
     

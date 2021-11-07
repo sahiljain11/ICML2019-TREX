@@ -3,7 +3,7 @@ import agc_demos
 import agc.dataset as ds
 
 import pickle
-from audio.contrastive_loss import ContrastiveSingleLoss
+from audio.contrastive_loss import ContrastiveSingleLoss, ContrastiveSinglePASELoss, ContrastiveSingleProsodyLoss, ContrastiveSinglePASEProsodyLoss
 import gym
 import time
 import numpy as np
@@ -190,6 +190,10 @@ def create_CAL_training_data(demonstrations, audio, num_snippets):
     
         batch.append((traj_i,traj_j))
 
+
+        # separate out yes snippet pairs, no snippet pairs
+        # create batches of data with one yes, 15 no pairs
+        # create batches of data with one no, 15 yes pairs
         for k in range(batch_size-1):
             ti, tj = 0, 0
             neg_label_len_i, neg_label_len_j = 0,0
@@ -234,9 +238,7 @@ def create_CAL_training_data(demonstrations, audio, num_snippets):
         snippet_pairs.append(batch)
 
     print('snippet pairs: ', len(snippet_pairs))
-    # TODO: separate out yes snippet pairs, no snippet pairs
-    # TODO: create batches of data with one yes, 15 no pairs
-    # TODO: create batches of data with one no, 15 yes pairs
+    
     return snippet_pairs
 
     
@@ -322,8 +324,8 @@ def learn_reward(reward_network, optimizer, training_data, num_iter, l1_reg, che
                 # print('obs:',len(training_obs[i][0]))
                 # print('data:',len(training_data[i][0]))
 
-            # TODO: traj_i, traj_j will be a batch of size 16
-            # TODO: loop through pairs in the batch for forward pass
+            # traj_i, traj_j will be a batch of size 16
+            # loop through pairs in the batch for forward pass
             batch = training_data[j]
             for b in batch:
             # print(len(traj_i))
@@ -456,7 +458,7 @@ if __name__=="__main__":
 
     data_dir = args.data_dir
     dataset = ds.AtariDataset(data_dir)
-    demonstrations, learning_returns, human_ann, human_heatmap, pase  = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, env_name)
+    demonstrations, learning_returns, human_ann, human_heatmap, pase, raw_audio  = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, env_name)
     # print(human_ann)
 
     demo_lengths = [len(d) for d in demonstrations]
