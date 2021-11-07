@@ -1,0 +1,47 @@
+{
+  "enduro" : {
+    "1": "enduro_45APTZRP7R_1",
+    "2": "enduro_45APTZRP7R_2",
+    "3": "enduro_45APTZRP7R_3"
+  },
+  "mspacman": {
+    "1": "mspacman_JE5W3X5P3T_1",
+    "2": "mspacman_JE5W3X5P3T_2",
+    "3": "mspacman_JE5W3X5P3T_3",
+    "4": "mspacman_JE5W3X5P3T_4",
+    "5": "mspacman_JE5W3X5P3T_5",
+    "6": "mspacman_JE5W3X5P3T_6"
+  },
+  "revenge": {
+    "1": "revenge_JPR7OWTO4Y_1",
+    "2": "revenge_JPR7OWTO4Y_2",
+    "3": "revenge_JPR7OWTO4Y_3",
+    "4": "revenge_JPR7OWTO4Y_4",
+    "5": "revenge_JPR7OWTO4Y_5"
+  },
+  "seaquest": {
+    "1": "seaquest_5E9XSWHWEA_1",
+    "2": "seaquest_5E9XSWHWEA_2",
+    "3": "seaquest_5E9XSWHWEA_3",
+    "4": "seaquest_5E9XSWHWEA_4"
+  },
+  "spaceinvaders": {
+    "1":  "spaceinvaders_X549THSLUZ_1",
+    "2":  "spaceinvaders_X549THSLUZ_2",
+    "3":  "spaceinvaders_X549THSLUZ_3",
+    "4":  "spaceinvaders_X549THSLUZ_4",
+    "5":  "spaceinvaders_X549THSLUZ_5",
+    "6":  "spaceinvaders_X549THSLUZ_6",
+    "7":  "spaceinvaders_X549THSLUZ_7",
+    "8":  "spaceinvaders_X549THSLUZ_8",
+    "9":  "spaceinvaders_X549THSLUZ_9",
+    "10": "spaceinvaders_X549THSLUZ_10",
+    "11": "spaceinvaders_R0YWVY6RKQ_1",
+    "12": "spaceinvaders_R0YWVY6RKQ_2",
+    "13": "spaceinvaders_R0YWVY6RKQ_3",
+    "14": "spaceinvaders_R0YWVY6RKQ_4",
+    "15": "spaceinvaders_R0YWVY6RKQ_5",
+    "16": "spaceinvaders_R0YWVY6RKQ_6",
+    "17": "spaceinvaders_R0YWVY6RKQ_7"
+  }
+}
