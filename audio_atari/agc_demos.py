@@ -114,6 +114,11 @@ def get_sorted_traj_indices(env_name, dataset):
     pase        = dataset.pasevec[g]
     raw_audio   = dataset.raw_audio[g]
 
+    for k in dataset.annotations[g].keys():
+        assert len(dataset.annotations[g][k]) == len(dataset.pasevec[g][k])
+        assert len(dataset.annotations[g][k]) == len(dataset.raw_audio[g][k])
+        #assert len(dataset.annotations[g][k]) == len(dataset.heatmaps[g][k])
+
     sorted_traj_indices = [x for _, x in sorted(zip(traj_scores, traj_indices), key=lambda pair: pair[0])]
     sorted_traj_scores = sorted(traj_scores)
 
