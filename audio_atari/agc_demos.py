@@ -19,7 +19,7 @@ def GrayScaleWarpImage(image):
     #frame = np.expand_dims(frame, -1)
     return frame
 
-def MaxSkipAndWarpFrames(trajectory_dir, annotations, heatmaps, pase_vecs, raw_pase):
+def MaxSkipAndWarpFrames(trajectory_dir, annotations, heatmaps, pase_vecs, raw_audio):
     """take a trajectory file of frames and max over every 3rd and 4th observation"""
     num_frames = len(listdir(trajectory_dir))
     skip=4
@@ -48,10 +48,10 @@ def MaxSkipAndWarpFrames(trajectory_dir, annotations, heatmaps, pase_vecs, raw_p
             anns.append(annotations[i])
             maps.append(heatmaps[i])
             pase.append(pase_vecs[i])
-            raw.append(raw_pase[i])
+            raw.append(raw_audio[i])
     return max_frames, anns, maps, pase, raw
 
-def StackFrames(frames, annotations, heatmaps, pase_vecs, raw_pase):
+def StackFrames(frames, annotations, heatmaps, pase_vecs, raw_audio):
     import copy
     """stack every four frames to make an observation (84,84,4)"""
     stacked = []
@@ -79,7 +79,7 @@ def StackFrames(frames, annotations, heatmaps, pase_vecs, raw_pase):
             anns.append(ann)
             maps.append(heatmaps[i])
             pase.append(pase_vecs[i])
-            raw.append(raw_pase[i])
+            raw.append(raw_audio[i])
     return stacked, anns, maps, pase, raw
 
 
@@ -112,7 +112,7 @@ def get_sorted_traj_indices(env_name, dataset):
     annotations = dataset.annotations[g]
     heatmaps    = dataset.heatmap[g]
     pase        = dataset.pasevec[g]
-    raw_pase    = dataset.rawpase[g]
+    raw_audio   = dataset.raw_audio[g]
 
     sorted_traj_indices = [x for _, x in sorted(zip(traj_scores, traj_indices), key=lambda pair: pair[0])]
     sorted_traj_scores = sorted(traj_scores)
@@ -163,7 +163,7 @@ def get_sorted_traj_indices(env_name, dataset):
     #print("(index, score) pairs:", len(demos))
     #return demos
     print("(index, score) pairs:", len(non_duplicates))
-    return non_duplicates, annotations, heatmaps, pase, raw_pase
+    return non_duplicates, annotations, heatmaps, pase, raw_audio
 
 def get_preprocessed_trajectories(env_name, dataset, data_dir, preprocess_name):
     """returns an array of trajectories corresponding to what you would get running checkpoints from PPO
@@ -173,20 +173,20 @@ def get_preprocessed_trajectories(env_name, dataset, data_dir, preprocess_name):
 
    
     print("generating human demos for", env_name)
-    demos, annotations, heatmaps, pase, raw_pase = get_sorted_traj_indices(env_name, dataset)
+    demos, annotations, heatmaps, pase, raw_audio = get_sorted_traj_indices(env_name, dataset)
 
     human_scores   = []
     human_demos    = []
     human_ann      = []
     human_heatmap  = []
     human_pase     = []
-    human_raw_pase = []
+    human_audio    = []
     for indx, score, _, _ in demos:
         human_scores.append(score)
         traj_dir = path.join(data_dir, 'screens', env_name, str(indx))
         #print("generating traj from", traj_dir)
-        maxed_traj, filtered_ann, filtered_heatmap, filtered_pase, filtered_raw_pase = MaxSkipAndWarpFrames(traj_dir, annotations[indx], heatmaps[indx], pase[indx], raw_pase[indx])
-        stacked_traj, filtered_ann, filtered_heatmap, filtered_pase, filtered_raw_pase = StackFrames(maxed_traj, filtered_ann, filtered_heatmap, filtered_pase, filtered_raw_pase)
+        maxed_traj, filtered_ann, filtered_heatmap, filtered_pase, filtered_raw_audio = MaxSkipAndWarpFrames(traj_dir, annotations[indx], heatmaps[indx], pase[indx], raw_audio[indx])
+        stacked_traj, filtered_ann, filtered_heatmap, filtered_pase, filtered_raw_audio = StackFrames(maxed_traj, filtered_ann, filtered_heatmap, filtered_pase, filtered_raw_audio)
         demo_norm_mask = []
         #normalize values to be between 0 and 1 and have top part masked
         for ob in stacked_traj:
@@ -195,8 +195,8 @@ def get_preprocessed_trajectories(env_name, dataset, data_dir, preprocess_name):
         human_ann.append(filtered_ann)
         human_heatmap.append(filtered_heatmap)
         human_pase.append(filtered_pase)
-        human_raw_pase.append(filtered_raw_pase)
-    return human_demos, human_scores, human_ann, human_heatmap, human_pase, human_raw_pase
+        human_audio.append(filtered_raw_audio)
+    return human_demos, human_scores, human_ann, human_heatmap, human_pase, human_audio
 
 
 if __name__ == "__main__":
