@@ -14,6 +14,7 @@ import torch.optim as optim
 from run_test import *
 
 import os
+import librosa
 
 from gaze.coverage import *
 from tensorboardX import SummaryWriter
@@ -26,7 +27,7 @@ from audio.contrastive_loss import *
 def create_training_data(demonstrations, gaze_maps, num_snippets, min_snippet_length, max_snippet_length):
     #collect training data
     max_traj_length = 0
-    training_obs, training_labels, training_gaze = [], [], []
+    training_obs, training_labels, training_gaze, training_pase, training_pitch = [], [], [], [], []
     num_demos = len(demonstrations)
 
     #fixed size snippets with progress prior
@@ -56,8 +57,9 @@ def create_training_data(demonstrations, gaze_maps, num_snippets, min_snippet_le
         traj_j = demonstrations[tj][tj_start:tj_start+rand_length:2]
 
         gaze_i = gaze_maps[ti][ti_start:ti_start+rand_length:2]
-        gaze_j = gaze_maps[ti][ti_start:ti_start+rand_length:2]
+        gaze_j = gaze_maps[tj][tj_start:tj_start+rand_length:2]
 
+        
         # print(gaze_i)
     
         max_traj_length = max(max_traj_length, len(traj_i), len(traj_j))
@@ -68,14 +70,15 @@ def create_training_data(demonstrations, gaze_maps, num_snippets, min_snippet_le
         training_obs.append((traj_i, traj_j))
         training_labels.append(label)
         training_gaze.append((gaze_i, gaze_j))
+        
 
     print("maximum traj length", max_traj_length)
     return training_obs, training_labels, training_gaze
 
 
-def create_CAL_training_data(demonstrations, audio, num_snippets):
+def create_CAL_ann_training_data(demonstrations, audio_ann, num_snippets):
 
-    snippet_pairs = []
+    snippet_pairs, pitch_pairs = [], []
 
     num_demos = len(demonstrations)
     fr = math.ceil(60/16)
@@ -87,7 +90,7 @@ def create_CAL_training_data(demonstrations, audio, num_snippets):
     # for each demo, collect start and stop frame indices of yes and no indices (use conf = 0.8)
     # linear scan, yes start and stop boundary
     yes_indices, no_indices = [], []
-    for j,demo in enumerate(audio):
+    for j,demo in enumerate(audio_ann):
         yes, no = [], []
         start = False
         for i,frame_stack in enumerate(demo):
@@ -133,6 +136,7 @@ def create_CAL_training_data(demonstrations, audio, num_snippets):
         label_len_i, label_len_j = 0,0
 
         #pick two random demonstrations (could be the same demo)
+        # TODO: update batch creation
         while(label_len_i==0 or label_len_j==0):
             ti = np.random.randint(num_demos)
             tj = np.random.randint(num_demos)
@@ -164,8 +168,280 @@ def create_CAL_training_data(demonstrations, audio, num_snippets):
     
         snippet_pairs.append((traj_i,traj_j))
 
+        pitch_i = np.mean(librosa.yin(raw_audio[ti][tj_start:tj_stop]))
+        pitch_j = np.mean(librosa.yin(raw_audio[tj][tj_start:tj_stop]))
+        
+        pitch_pairs.append((pitch_i, pitch_j))
+
+
+    print('snippet pairs: ', len(snippet_pairs))
+    return snippet_pairs, pitch_pairs
+
+
+
+def create_CAL_training_data(demonstrations, audio_ann, raw_audio, num_snippets):
+
+    snippet_pairs = []
+    batch_size = 16
+
+    num_demos = len(demonstrations)
+    fr = math.ceil(60/16)
+    conf = 0.7
+
+    # in seconds
+    left_offset, right_offset = 3.0, 3.0
+
+    # for each demo, collect start and stop frame indices of yes and no indices (use conf = 0.8)
+    # linear scan, yes start and stop boundary
+    yes_indices, no_indices = [], []
+    for j,demo in enumerate(audio_ann):
+        yes, no = [], []
+        start = False
+        for i,frame_stack in enumerate(demo):
+
+            # start of a 'yes' speech segment
+            if demo[i]['word']=='yes':
+                if start==False and demo[i]['conf']>=conf:
+                    if (i>0 and demo[i-1]['word']==None) or i==0:
+                        start = True
+                        start_idx = i
+                    
+                elif start==True and demo[i]['conf']>=conf:
+                    if i==len(demo)-1 or (i<len(demo)-1 and demo[i+1]['word']==None):
+                        start = False
+                        stop_idx = i
+                        yes.append([start_idx,stop_idx])
+
+            # start of a 'no' speech segment
+            elif demo[i]['word']=='no':
+                if start==False and demo[i]['conf']>=conf:
+                    if (i>0 and demo[i-1]['word']==None) or i==0:
+                        start = True
+                        start_idx = i
+                    
+                elif start==True and demo[i]['conf']>=conf:
+                    if i==len(demo)-1 or (i<len(demo)-1 and demo[i+1]['word']==None):
+                        start = False
+                        stop_idx = i
+                        no.append([start_idx,stop_idx])
+
+        print(j, ', yes: ', len(yes), ' no: ', len(no))
+        yes_indices.append(yes)
+        no_indices.append(no)
+
+    
+    indices = [yes_indices, no_indices]
+    print('yes utterances: ', len(yes_indices))
+    print('no utterances: ', len(no_indices))
+
+    num_batches = int(num_snippets/batch_size)
+
+    #fixed size snippets
+    for n in range(num_batches):
+        ti, tj = 0, 0
+        label_len_i, label_len_j = 0,0
+
+        batch = []
+
+        #pick two random demonstrations (could be the same demo)
+        # update batch creation
+        while(label_len_i==0 or label_len_j==0):
+            ti = np.random.randint(num_demos)
+            tj = np.random.randint(num_demos)
+
+            # randomly pick yes/no
+            label = np.random.randint(2)
+            neg_label = 1-label
+            assert((neg_label==0 or neg_label==1) and neg_label!=label)
+
+            # randomly pick corresponding index pair from ti
+            label_len_i, label_len_j = len(indices[label][ti]), len(indices[label][tj])
+
+        snippet_id_i, snippet_id_j = np.random.randint(label_len_i), np.random.randint(label_len_j)
+        ti_start, ti_stop = indices[label][ti][snippet_id_i][0], indices[label][ti][snippet_id_i][1]
+        tj_start, tj_stop = indices[label][tj][snippet_id_j][0], indices[label][tj][snippet_id_j][1]
+
+
+        left = np.random.randint(int(left_offset*fr))
+        right = np.random.randint(int(right_offset*fr))
+        ti_start_offset = max(0,ti_start-left)
+        ti_stop_offset = min(ti_stop+right,len(demonstrations[ti]))
+
+        # start point randomly selected from the left of the actual start
+        ti_start = np.random.randint(ti_start_offset, ti_start+1)
+        ti_stop = np.random.randint(ti_stop, ti_stop_offset+1)
+
+        tj_start_offset = max(0,tj_start-left)
+        tj_stop_offset = min(tj_stop+right,len(demonstrations[tj]))
+
+        # start point randomly selected from the left of the actual start
+        tj_start = np.random.randint(tj_start_offset, tj_start+1)
+        tj_stop = np.random.randint(tj_stop, tj_stop_offset+1)
+
+        #print("start", ti_start, tj_start)
+        traj_i = demonstrations[ti][ti_start:ti_stop] 
+        traj_j = demonstrations[tj][tj_start:tj_stop]
+    
+        raw_audio_i = raw_audio[ti][tj_start:tj_stop]
+        raw_audio_j = raw_audio[tj][tj_start:tj_stop]
+        
+        batch.append((traj_i, traj_j, raw_audio_i, raw_audio_j))
+
+
+        # separate out yes snippet pairs, no snippet pairs
+        # create batches of data with one yes, 15 no pairs
+        # create batches of data with one no, 15 yes pairs
+        for k in range(batch_size-1):
+            ti, tj = 0, 0
+            neg_label_len_i, neg_label_len_j = 0,0
+            # randomly select any demo pair
+            while(neg_label_len_i==0 or neg_label_len_j==0):
+                ti = np.random.randint(num_demos)
+                tj = np.random.randint(num_demos)
+
+                neg_label_len_i, neg_label_len_j = len(indices[neg_label][ti]), len(indices[neg_label][tj])
+
+
+            # randomly pick corresponding index pair from ti, tj
+            snippet_id_i, snippet_id_j = np.random.randint(neg_label_len_i), np.random.randint(neg_label_len_j)
+            ti_start, ti_stop = indices[neg_label][ti][snippet_id_i][0], indices[neg_label][ti][snippet_id_i][1]
+            tj_start, tj_stop = indices[neg_label][tj][snippet_id_j][0], indices[neg_label][tj][snippet_id_j][1]
+
+            left = np.random.randint(int(left_offset*fr))
+            right = np.random.randint(int(right_offset*fr))
+            ti_start_offset = max(0,ti_start-left)
+            ti_stop_offset = min(ti_stop+right,len(demonstrations[ti]))
+
+            # start point randomly selected from the left of the actual start
+            ti_start = np.random.randint(ti_start_offset, ti_start+1)
+            # print(ti_stop,ti_stop_offset)
+            ti_stop = np.random.randint(ti_stop, ti_stop_offset+1)
+
+
+            tj_start_offset = max(0,tj_start-left)
+            tj_stop_offset = min(tj_stop+right,len(demonstrations[tj]))
+
+            # start point randomly selected from the left of the actual start
+            tj_start = np.random.randint(tj_start_offset, tj_start+1)
+            tj_stop = np.random.randint(tj_stop, tj_stop_offset+1)
+
+            #print("start", ti_start, tj_start)
+            traj_i = demonstrations[ti][ti_start:ti_stop] 
+            traj_j = demonstrations[tj][tj_start:tj_stop]
+
+            raw_audio_i = raw_audio[ti][tj_start:tj_stop]
+            raw_audio_j = raw_audio[tj][tj_start:tj_stop]
+
+            batch.append((traj_i,traj_j, raw_audio_i, raw_audio_j))
+
+        snippet_pairs.append(batch)
+
     print('snippet pairs: ', len(snippet_pairs))
     return snippet_pairs
+
+
+def create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, num_snippets):
+
+    snippet_pairs = []
+
+    num_demos = len(demonstrations)
+    fr = math.ceil(60/16)
+    conf = 0.7
+
+    # in seconds
+    left_offset, right_offset = 3.0, 3.0
+
+    # for each demo, collect start and stop frame indices of yes and no indices (use conf = 0.8)
+    # linear scan, yes start and stop boundary
+    indices, demo_idx = [], []
+    for j,demo in enumerate(audio_ann):
+        yes, no = [], []
+        start = False
+        for i,frame_stack in enumerate(demo):
+
+            # start of a 'yes' speech segment
+            if demo[i]['word']=='yes':
+                if start==False and demo[i]['conf']>=conf:
+                    if (i>0 and demo[i-1]['word']==None) or i==0:
+                        start = True
+                        start_idx = i
+                    
+                elif start==True and demo[i]['conf']>=conf:
+                    if i==len(demo)-1 or (i<len(demo)-1 and demo[i+1]['word']==None):
+                        start = False
+                        stop_idx = i
+                        demo_idx.append([start_idx,stop_idx])
+
+            # start of a 'no' speech segment
+            elif demo[i]['word']=='no':
+                if start==False and demo[i]['conf']>=conf:
+                    if (i>0 and demo[i-1]['word']==None) or i==0:
+                        start = True
+                        start_idx = i
+                    
+                elif start==True and demo[i]['conf']>=conf:
+                    if i==len(demo)-1 or (i<len(demo)-1 and demo[i+1]['word']==None):
+                        start = False
+                        stop_idx = i
+                        demo_idx.append([start_idx,stop_idx])
+
+        # print(j, ', yes: ', len(yes), ' no: ', len(no))
+        indices.append(demo_idx)
+
+
+    
+    # indices = [yes_indices, no_indices]
+    print('utterances: ', len(indices))
+    # print('no utterances: ', len(no_indices))
+
+    #fixed size snippets
+    for n in range(num_snippets):
+        ti, tj = 0, 0
+        label_len_i, label_len_j = 0,0
+
+        #pick two random demonstrations (could be the same demo)
+        # update batch creation to be a set of random yes/no pairs (not organized)
+        while(label_len_i==0 or label_len_j==0):
+            ti = np.random.randint(num_demos)
+            tj = np.random.randint(num_demos)
+
+            # randomly pick yes/no
+            # label = np.random.randint(2)
+
+            # randomly pick corresponding index pair from ti
+            label_len_i, label_len_j = len(indices[ti]), len(indices[tj])
+
+        snippet_id_i, snippet_id_j = np.random.randint(label_len_i), np.random.randint(label_len_j)
+        ti_start, ti_stop = indices[ti][snippet_id_i][0], indices[ti][snippet_id_i][1]
+        tj_start, tj_stop = indices[tj][snippet_id_j][0], indices[tj][snippet_id_j][1]
+
+
+        left = np.random.randint(int(left_offset*fr))
+        right = np.random.randint(int(right_offset*fr))
+        ti_start = max(0,ti_start-left)
+        ti_stop = min(ti_stop+right,len(demonstrations[ti]))
+        ti_start = np.random.randint(ti_start, ti_stop)
+
+        tj_start = max(0,tj_start-left)
+        tj_stop = min(tj_stop+right,len(demonstrations[tj]))
+        tj_start = np.random.randint(tj_start, tj_stop)
+
+        #print("start", ti_start, tj_start)
+        traj_i = demonstrations[ti][ti_start:ti_stop] 
+        traj_j = demonstrations[tj][tj_start:tj_stop]
+
+        pase_i = np.mean(pase[ti][ti_start:ti_stop])
+        pase_j = np.mean(pase[tj][tj_start:tj_stop])
+
+        raw_audio_i = raw_audio[ti][tj_start:tj_stop]
+        raw_audio_j = raw_audio[tj][tj_start:tj_stop]
+        snippet_pairs.append((traj_i,traj_j, pase_i, pase_j, raw_audio_i, raw_audio_j))
+
+
+    print('snippet pairs: ', len(snippet_pairs))
+    return snippet_pairs
+
+        
 
 
 class Net(nn.Module):
@@ -216,7 +492,6 @@ class Net(nn.Module):
         return sum_rewards, sum_abs_rewards, conv_map_stacked
 
 
-
     def forward(self, traj_i, traj_j):
         '''compute cumulative return for each trajectory and return logits'''
         cum_r_i, abs_r_i, conv_map_i = self.cum_return(traj_i)
@@ -225,8 +500,8 @@ class Net(nn.Module):
 
     def forward_cal(self, traj_i, traj_j):
         '''compute cumulative return for each trajectory and return logits'''
-        cum_r_i, abs_r_i, conv_map_i = self.cum_return(traj_i)
-        cum_r_j, abs_r_j, conv_map_j = self.cum_return(traj_j)
+        cum_r_i, _, _ = self.cum_return(traj_i)
+        cum_r_j, _, _ = self.cum_return(traj_j)
         return cum_r_i.unsqueeze(0).unsqueeze(0), cum_r_j.unsqueeze(0).unsqueeze(0)
 
 
@@ -255,7 +530,7 @@ def CGL(training_gaze, conv_map_i, conv_map_j):
 
 
 def learn_reward(reward_network, optimizer, training_data, cal_training_data, num_iter, l1_reg, checkpoint_dir, env, \
-    loss_type, rl_mul=0.5, gaze_mul=0.25, audio_mul=0.25):
+    loss_type, cal_type='ann', prosody_type='pitch', rl_mul=0.5, gaze_mul=0.25, audio_mul=0.25):
 
     #check if gpu available
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -276,13 +551,20 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
 
     audio_reg = 0.5
     audio_scale = 0.1
-
-    batch_size = 32
-    num_batches = int(len(cal_training_data)/batch_size)
-    cal_loss_criterion = ContrastiveLoss(batch_size)
+    batch_size = 16
+    
+    cal_loss_criterion = None
+    if cal_type=='prosody_pase':
+        cal_loss_criterion = ContrastivePASEProsodyLoss(batch_size)
+    elif cal_type=='pase':
+        cal_loss_criterion = ContrastivePASELoss(batch_size)
+    elif cal_type=='prosody_ann':
+        cal_loss_criterion = ContrastiveSingleProsodyLoss(batch_size)
+    elif cal_type=='ann':
+        cal_loss_criterion = ContrastiveSingleLoss(batch_size)
 
     training_inputs, training_outputs, training_gaze = training_data
-    assert(len(training_outputs)>num_batches)
+    # assert(len(training_outputs)>num_batches)
 
     training_data = list(zip(training_inputs, training_outputs, training_gaze))
     k = 0
@@ -320,25 +602,112 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
             # audio loss
             if 'cal' in loss_type:
                 # CAL
-                j = i%num_batches
                 rewards_m, rewards_n = torch.empty((0), dtype=torch.float, device = 'cuda'), torch.empty((0), dtype=torch.float, device = 'cuda')
+                if cal_type=='pase' or cal_type=='prosody_pase':
+                    # batch_size = 32
+                    num_batches = int(len(cal_training_data)/batch_size)
 
-                for m in range(j*batch_size,min((j+1)*batch_size,len(cal_training_data))):
-                    traj_m, traj_n = cal_training_data[m]
+                    j = i%num_batches
                     
-                    traj_m = np.array(traj_m)
-                    traj_n = np.array(traj_n)
-                    traj_m = torch.from_numpy(traj_m).float().to(device)
-                    traj_n = torch.from_numpy(traj_n).float().to(device)
+                    if cal_type=='pase':
+                        for m in range(j*batch_size,min((j+1)*batch_size,len(cal_training_data))):
+                            traj_m, traj_n, pase_m, pase_n = cal_training_data[m]
+                            
+                            traj_m, traj_n = np.array(traj_m), np.array(traj_n)
+                            pase_m, pase_n = np.mean(np.array(pase_m)), np.mean(np.array(pase_n))
+                            
+                            traj_m = torch.from_numpy(traj_m).float().to(device)
+                            traj_n = torch.from_numpy(traj_n).float().to(device)
+
+                            pase_m = torch.from_numpy(pase_m).float().to(device)
+                            pase_n = torch.from_numpy(pase_n).float().to(device)
+                            
+                            r_m, r_n = reward_network.forward_cal(traj_m, traj_n)
+                            
+                            rewards_m = torch.cat((rewards_m,r_m),0)
+                            rewards_n = torch.cat((rewards_n,r_n),0)
+
+                        audio_loss = audio_scale*cal_loss_criterion(rewards_m, rewards_n, pase_m, pase_n)
+
+                    elif cal_type=='prosody_pase':
+                        for m in range(j*batch_size,min((j+1)*batch_size,len(cal_training_data))):
+                            traj_m, traj_n, pase_m, pase_n, raw_audio_m, raw_audio_n = cal_training_data[m]
+                            
+                            traj_m, traj_n = np.array(traj_m), np.array(traj_n)
+                            pase_m, pase_n = np.mean(np.array(pase_m)), np.mean(np.array(pase_n))
+
+                            if prosody_type=='pitch':
+                                prosody_m, prosody_n = np.mean(librosa.yin(raw_audio_m), fmin=80, fmax=255), np.mean(librosa.yin(raw_audio_n), fmin=80, fmax=255)
+                            elif prosody_type=='energy':
+                                prosody_m, prosody_n = np.mean([e*e for e in raw_audio_m.tolist()]), np.mean([e*e for e in raw_audio_n.tolist()])
+
+                            traj_m = torch.from_numpy(traj_m).float().to(device)
+                            traj_n = torch.from_numpy(traj_n).float().to(device)
+
+                            pase_m = torch.from_numpy(pase_m).float().to(device)
+                            pase_n = torch.from_numpy(pase_n).float().to(device)
+
+                            prosody_m = torch.from_numpy(prosody_m).float().to(device)
+                            prosody_n = torch.from_numpy(prosody_n).float().to(device)
+                            
+                            r_m, r_n = reward_network.forward_cal(traj_m, traj_n)
+                            
+                            rewards_m = torch.cat((rewards_m,r_m),0)
+                            rewards_n = torch.cat((rewards_n,r_n),0)
+
+                        audio_loss = audio_scale*cal_loss_criterion(rewards_m, rewards_n, pase_m, pase_n, prosody_m, prosody_n)
                     
-                    r_m, r_n = reward_network.forward_cal(traj_m, traj_n)
-                    
-                    rewards_m = torch.cat((rewards_m,r_m),0)
-                    rewards_n = torch.cat((rewards_n,r_n),0)
+                    writer.add_scalar('CAL', audio_loss.item(), k)
+
+                elif cal_type=='prosody_ann' or cal_type=='ann':
+                    # batch_size = 16
+                    num_batches = len(cal_training_data)
+
+                    # select which batch to process
+                    j = k%num_batches
+                    batch = training_data[j]
+                    if cal_type=='ann':
+                        for b in batch:
+                            traj_m, traj_n = b
+
+                            traj_m = np.array(traj_m)
+                            traj_n = np.array(traj_n)
+                            traj_m = torch.from_numpy(traj_m).float().to(device)
+                            traj_n = torch.from_numpy(traj_n).float().to(device)
+
+                            r_m, r_n = reward_network.forward(traj_m, traj_n)
+
+                            rewards_m = torch.cat((rewards_m,r_m),0)
+                            rewards_n = torch.cat((rewards_n,r_n),0)
+
+                        audio_loss = audio_scale*cal_loss_criterion(rewards_m, rewards_n)
+
+                    elif cal_type=='prosody_ann':
+                        for b in batch:
+                            traj_m, traj_n, raw_audio_m, raw_audio_n = b
+
+                            if prosody_type=='pitch':
+                                prosody_m, prosody_n = np.mean(librosa.yin(raw_audio_m), fmin=80, fmax=255), np.mean(librosa.yin(raw_audio_n), fmin=80, fmax=255)
+                            elif prosody_type=='energy':
+                                prosody_m, prosody_n = np.mean([e*e for e in raw_audio_m.tolist()]), np.mean([e*e for e in raw_audio_n.tolist()])
+
+                            traj_m, traj_n = np.array(traj_m), np.array(traj_n)
+                            traj_m = torch.from_numpy(traj_m).float().to(device)
+                            traj_n = torch.from_numpy(traj_n).float().to(device)
+
+                            prosody_m = torch.from_numpy(prosody_m).float().to(device)
+                            prosody_n = torch.from_numpy(prosody_n).float().to(device)
+
+                            r_m, r_n = reward_network.forward(traj_m, traj_n)
+
+                            rewards_m = torch.cat((rewards_m,r_m),0)
+                            rewards_n = torch.cat((rewards_n,r_n),0)
+
+                        audio_loss = audio_scale*cal_loss_criterion(rewards_m, rewards_n, prosody_m, prosody_n)
 
 
-                audio_loss = audio_scale*cal_loss_criterion(rewards_m, rewards_n)
-                writer.add_scalar('CAL', audio_loss.item(), k)
+                    writer.add_scalar('CAL', audio_loss.item(), k)
+
 
             if loss_type=='rl_cgl':
                 loss = (1-gaze_reg)*loss + gaze_reg * gaze_loss
@@ -397,7 +766,7 @@ def calc_accuracy(reward_network, training_inputs, training_outputs):
             traj_j = torch.from_numpy(traj_j).float().to(device)
 
             #forward to get logits
-            outputs, abs_return, _, _ = reward_network.forward(traj_i, traj_j)
+            outputs, _, _, _ = reward_network.forward(traj_i, traj_j)
             #print(outputs)
             _, pred_label = torch.max(outputs,0)
             #print(pred_label)
@@ -501,7 +870,7 @@ if __name__=="__main__":
 
     data_dir = args.data_dir
     dataset = ds.AtariDataset(data_dir)
-    demonstrations, learning_returns, human_ann, human_heatmap = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, env_name)
+    demonstrations, learning_returns, human_ann, human_heatmap, pase, raw_audio = agc_demos.get_preprocessed_trajectories(agc_env_name, dataset, data_dir, env_name)
     # print(human_ann)
 
     demo_lengths = [len(d) for d in demonstrations]
@@ -514,14 +883,14 @@ if __name__=="__main__":
     print([a[0] for a in zip(learning_returns, demonstrations)])
     
     demonstrations = [x for _, x in sorted(zip(learning_returns,demonstrations), key=lambda pair: pair[0])]
-    audio = [x for _, x in sorted(zip(learning_returns,human_ann), key=lambda pair: pair[0])]
+    audio_ann = [x for _, x in sorted(zip(learning_returns,human_ann), key=lambda pair: pair[0])]
 
     sorted_returns = sorted(learning_returns)
     print(sorted_returns)
     training_data = create_training_data(demonstrations, human_heatmap, num_snippets, min_snippet_length, max_snippet_length)
     training_obs, training_labels, training_gaze = training_data
 
-    cal_training_data = create_CAL_training_data(demonstrations, audio, num_snippets)
+    cal_training_data = create_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, num_snippets)
 
     print("num training_obs", len(training_obs))
     print("num_labels", len(training_labels))

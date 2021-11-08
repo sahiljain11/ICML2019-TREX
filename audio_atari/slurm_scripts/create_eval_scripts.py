@@ -16,9 +16,10 @@ seeds = ['0','1','2']
 # extra = '_cgl_cal'
 # extra = '_rl_cgl_cal_0.5-0.1-0.4'
 # extra = '_rl_cgl_cal_0.1-0.8-0.1'
-extra = '_rl_cgl_cal_0.35-0.05-0.6'
+# extra = '_rl_cgl_cal_0.35-0.05-0.6'
 # extra = '_rl_cgl_cal_0.1-0.45-0.45'
 # extra = '_rl_cgl_cal_0.4-0.2-0.4'
+extra = '_rl_cgl_cal_0.9-0.05-0.05'
 
 for seed in seeds:
     bash_file_name = 'eval/eval_'+env[0]+extra+'_'+seed+'.sh'
