@@ -27,7 +27,7 @@ from audio.contrastive_loss import *
 def create_training_data(demonstrations, gaze_maps, num_snippets, min_snippet_length, max_snippet_length):
     #collect training data
     max_traj_length = 0
-    training_obs, training_labels, training_gaze, training_pase, training_pitch = [], [], [], [], []
+    training_obs, training_labels, training_gaze = [], [], []
     num_demos = len(demonstrations)
 
     #fixed size snippets with progress prior
@@ -53,7 +53,7 @@ def create_training_data(demonstrations, gaze_maps, num_snippets, min_snippet_le
             #print(tj_start, len(demonstrations[ti]))
             ti_start = np.random.randint(tj_start, len(demonstrations[ti]) - rand_length + 1)
         #print("start", ti_start, tj_start)
-        traj_i = demonstrations[ti][ti_start:ti_start+rand_length:2] #skip everyother framestack to reduce size
+        traj_i = demonstrations[ti][ti_start:ti_start+rand_length:2] # skip every other framestack to reduce size
         traj_j = demonstrations[tj][tj_start:tj_start+rand_length:2]
 
         gaze_i = gaze_maps[ti][ti_start:ti_start+rand_length:2]
@@ -235,6 +235,7 @@ def create_CAL_training_data(demonstrations, audio_ann, raw_audio, num_snippets)
     print('no utterances: ', len(no_indices))
 
     num_batches = int(num_snippets/batch_size)
+    print('num_batches: ',num_batches)
 
     #fixed size snippets
     for n in range(num_batches):
@@ -270,6 +271,7 @@ def create_CAL_training_data(demonstrations, audio_ann, raw_audio, num_snippets)
         # start point randomly selected from the left of the actual start
         ti_start = np.random.randint(ti_start_offset, ti_start+1)
         ti_stop = np.random.randint(ti_stop, ti_stop_offset+1)
+        assert(ti_stop>ti_start)
 
         tj_start_offset = max(0,tj_start-left)
         tj_stop_offset = min(tj_stop+right,len(demonstrations[tj]))
@@ -277,13 +279,17 @@ def create_CAL_training_data(demonstrations, audio_ann, raw_audio, num_snippets)
         # start point randomly selected from the left of the actual start
         tj_start = np.random.randint(tj_start_offset, tj_start+1)
         tj_stop = np.random.randint(tj_stop, tj_stop_offset+1)
+        assert(tj_stop>tj_start)
 
         #print("start", ti_start, tj_start)
         traj_i = demonstrations[ti][ti_start:ti_stop] 
         traj_j = demonstrations[tj][tj_start:tj_stop]
     
-        raw_audio_i = raw_audio[ti][tj_start:tj_stop]
-        raw_audio_j = raw_audio[tj][tj_start:tj_stop]
+        raw_audio_i = np.concatenate(raw_audio[ti][ti_start:ti_stop])
+        # print('****raw_audio_i:',raw_audio_i.shape)
+        # print('start, stop: ', ti_start, ti_stop)
+        # print('****raw_audio_i:',len(raw_audio_i),len(raw_audio[ti]))#, len(raw_audio_i[0]), type(raw_audio_i[0]))
+        raw_audio_j = np.concatenate(raw_audio[tj][tj_start:tj_stop])
         
         batch.append((traj_i, traj_j, raw_audio_i, raw_audio_j))
 
@@ -316,6 +322,7 @@ def create_CAL_training_data(demonstrations, audio_ann, raw_audio, num_snippets)
             ti_start = np.random.randint(ti_start_offset, ti_start+1)
             # print(ti_stop,ti_stop_offset)
             ti_stop = np.random.randint(ti_stop, ti_stop_offset+1)
+            assert(ti_stop>ti_start)
 
 
             tj_start_offset = max(0,tj_start-left)
@@ -324,13 +331,14 @@ def create_CAL_training_data(demonstrations, audio_ann, raw_audio, num_snippets)
             # start point randomly selected from the left of the actual start
             tj_start = np.random.randint(tj_start_offset, tj_start+1)
             tj_stop = np.random.randint(tj_stop, tj_stop_offset+1)
+            assert(tj_stop>tj_start)
 
             #print("start", ti_start, tj_start)
             traj_i = demonstrations[ti][ti_start:ti_stop] 
             traj_j = demonstrations[tj][tj_start:tj_stop]
 
-            raw_audio_i = raw_audio[ti][tj_start:tj_stop]
-            raw_audio_j = raw_audio[tj][tj_start:tj_stop]
+            raw_audio_i = np.concatenate(raw_audio[ti][ti_start:ti_stop])
+            raw_audio_j = np.concatenate(raw_audio[tj][tj_start:tj_stop])
 
             batch.append((traj_i,traj_j, raw_audio_i, raw_audio_j))
 
@@ -343,6 +351,9 @@ def create_CAL_training_data(demonstrations, audio_ann, raw_audio, num_snippets)
 def create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, num_snippets):
 
     snippet_pairs = []
+    assert(len(demonstrations)==len(audio_ann))
+    for i in range(len(demonstrations)):
+        assert(len(demonstrations[i])==len(audio_ann[i]))
 
     num_demos = len(demonstrations)
     fr = math.ceil(60/16)
@@ -355,34 +366,37 @@ def create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, nu
     # linear scan, yes start and stop boundary
     indices, demo_idx = [], []
     for j,demo in enumerate(audio_ann):
-        yes, no = [], []
-        start = False
+        # yes, no = [], []
+        yes_start, no_start = False, False
         for i,frame_stack in enumerate(demo):
 
             # start of a 'yes' speech segment
             if demo[i]['word']=='yes':
-                if start==False and demo[i]['conf']>=conf:
+                if yes_start==False and demo[i]['conf']>=conf:
                     if (i>0 and demo[i-1]['word']==None) or i==0:
-                        start = True
+                        yes_start = True
                         start_idx = i
                     
-                elif start==True and demo[i]['conf']>=conf:
+                elif yes_start==True and demo[i]['conf']>=conf:
                     if i==len(demo)-1 or (i<len(demo)-1 and demo[i+1]['word']==None):
-                        start = False
+                        yes_start = False
                         stop_idx = i
+                        assert(stop_idx>start_idx)
                         demo_idx.append([start_idx,stop_idx])
+
 
             # start of a 'no' speech segment
             elif demo[i]['word']=='no':
-                if start==False and demo[i]['conf']>=conf:
+                if no_start==False and demo[i]['conf']>=conf:
                     if (i>0 and demo[i-1]['word']==None) or i==0:
-                        start = True
+                        no_start = True
                         start_idx = i
                     
-                elif start==True and demo[i]['conf']>=conf:
+                elif no_start==True and demo[i]['conf']>=conf:
                     if i==len(demo)-1 or (i<len(demo)-1 and demo[i+1]['word']==None):
-                        start = False
+                        no_start = False
                         stop_idx = i
+                        assert(stop_idx>start_idx)
                         demo_idx.append([start_idx,stop_idx])
 
         # print(j, ', yes: ', len(yes), ' no: ', len(no))
@@ -391,7 +405,7 @@ def create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, nu
 
     
     # indices = [yes_indices, no_indices]
-    print('utterances: ', len(indices))
+    print('utterances demo 0: ', len(indices[0]))
     # print('no utterances: ', len(no_indices))
 
     #fixed size snippets
@@ -418,13 +432,29 @@ def create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, nu
 
         left = np.random.randint(int(left_offset*fr))
         right = np.random.randint(int(right_offset*fr))
-        ti_start = max(0,ti_start-left)
-        ti_stop = min(ti_stop+right,len(demonstrations[ti]))
-        ti_start = np.random.randint(ti_start, ti_stop)
+        # ti_start = max(0,ti_start-left)
+        # ti_stop = min(ti_stop+right,len(demonstrations[ti]))
+        # ti_start = np.random.randint(ti_start, ti_stop)
+        ti_start_offset = max(0,ti_start-left)
+        ti_stop_offset = min(ti_stop+right,len(demonstrations[ti]))
 
-        tj_start = max(0,tj_start-left)
-        tj_stop = min(tj_stop+right,len(demonstrations[tj]))
-        tj_start = np.random.randint(tj_start, tj_stop)
+        # start point randomly selected from the left of the actual start
+        # TODO: fix why stop idx > length of demo?
+        print(ti_stop, ti_stop_offset, ti_stop+right,len(demonstrations[ti]))
+        ti_start = np.random.randint(ti_start_offset, ti_start+1)
+        ti_stop = np.random.randint(ti_stop, ti_stop_offset+1)
+        assert(ti_stop>ti_start)
+
+        # tj_start = max(0,tj_start-left)
+        # tj_stop = min(tj_stop+right,len(demonstrations[tj]))
+        # tj_start = np.random.randint(tj_start, tj_stop)
+        tj_start_offset = max(0,tj_start-left)
+        tj_stop_offset = min(tj_stop+right,len(demonstrations[tj]))
+
+        # start point randomly selected from the left of the actual start
+        tj_start = np.random.randint(tj_start_offset, tj_start+1)
+        tj_stop = np.random.randint(tj_stop, tj_stop_offset+1)
+        assert(tj_stop>tj_start)
 
         #print("start", ti_start, tj_start)
         traj_i = demonstrations[ti][ti_start:ti_stop] 
@@ -433,8 +463,8 @@ def create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, nu
         pase_i = np.mean(pase[ti][ti_start:ti_stop])
         pase_j = np.mean(pase[tj][tj_start:tj_stop])
 
-        raw_audio_i = raw_audio[ti][tj_start:tj_stop]
-        raw_audio_j = raw_audio[tj][tj_start:tj_stop]
+        raw_audio_i = np.concatenate(raw_audio[ti][ti_start:ti_stop])
+        raw_audio_j = np.concatenate(raw_audio[tj][tj_start:tj_stop])
         snippet_pairs.append((traj_i,traj_j, pase_i, pase_j, raw_audio_i, raw_audio_j))
 
 
@@ -496,13 +526,14 @@ class Net(nn.Module):
         '''compute cumulative return for each trajectory and return logits'''
         cum_r_i, abs_r_i, conv_map_i = self.cum_return(traj_i)
         cum_r_j, abs_r_j, conv_map_j = self.cum_return(traj_j)
-        return torch.cat((cum_r_i.unsqueeze(0), cum_r_j.unsqueeze(0)),0), abs_r_i + abs_r_j, conv_map_i, conv_map_j
+        # return torch.cat((cum_r_i.unsqueeze(0), cum_r_j.unsqueeze(0)),0), abs_r_i + abs_r_j, conv_map_i, conv_map_j
+        return torch.cat((cum_r_i.unsqueeze(0), cum_r_j.unsqueeze(0)),0), abs_r_i + abs_r_j, cum_r_i.unsqueeze(0).unsqueeze(0), cum_r_j.unsqueeze(0).unsqueeze(0), conv_map_i, conv_map_j
 
-    def forward_cal(self, traj_i, traj_j):
-        '''compute cumulative return for each trajectory and return logits'''
-        cum_r_i, _, _ = self.cum_return(traj_i)
-        cum_r_j, _, _ = self.cum_return(traj_j)
-        return cum_r_i.unsqueeze(0).unsqueeze(0), cum_r_j.unsqueeze(0).unsqueeze(0)
+    # def forward_cal(self, traj_i, traj_j):
+    #     '''compute cumulative return for each trajectory and return logits'''
+    #     cum_r_i, _, _ = self.cum_return(traj_i)
+    #     cum_r_j, _, _ = self.cum_return(traj_j)
+    #     return cum_r_i.unsqueeze(0).unsqueeze(0), cum_r_j.unsqueeze(0).unsqueeze(0)
 
 
 def CGL(training_gaze, conv_map_i, conv_map_j):
@@ -587,7 +618,7 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
             #zero out gradient
             optimizer.zero_grad()
 
-            outputs, abs_rewards, conv_map_i, conv_map_j = reward_network.forward(traj_i, traj_j)
+            outputs, abs_rewards, _, _, conv_map_i, conv_map_j = reward_network.forward(traj_i, traj_j)
             outputs = outputs.unsqueeze(0)
 
             if 'rl' in loss_type:
@@ -603,6 +634,7 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
             if 'cal' in loss_type:
                 # CAL
                 rewards_m, rewards_n = torch.empty((0), dtype=torch.float, device = 'cuda'), torch.empty((0), dtype=torch.float, device = 'cuda')
+                prosody_m, prosody_n = torch.empty((0), dtype=torch.float, device = 'cuda'), torch.empty((0), dtype=torch.float, device = 'cuda')
                 if cal_type=='pase' or cal_type=='prosody_pase':
                     # batch_size = 32
                     num_batches = int(len(cal_training_data)/batch_size)
@@ -611,7 +643,7 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                     
                     if cal_type=='pase':
                         for m in range(j*batch_size,min((j+1)*batch_size,len(cal_training_data))):
-                            traj_m, traj_n, pase_m, pase_n = cal_training_data[m]
+                            traj_m, traj_n, pase_m, pase_n, _, _ = cal_training_data[m]
                             
                             traj_m, traj_n = np.array(traj_m), np.array(traj_n)
                             pase_m, pase_n = np.mean(np.array(pase_m)), np.mean(np.array(pase_n))
@@ -622,7 +654,8 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                             pase_m = torch.from_numpy(pase_m).float().to(device)
                             pase_n = torch.from_numpy(pase_n).float().to(device)
                             
-                            r_m, r_n = reward_network.forward_cal(traj_m, traj_n)
+                            _, _, r_m, r_n, _, _ = reward_network.forward(traj_m, traj_n)
+                            
                             
                             rewards_m = torch.cat((rewards_m,r_m),0)
                             rewards_n = torch.cat((rewards_n,r_n),0)
@@ -637,9 +670,16 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                             pase_m, pase_n = np.mean(np.array(pase_m)), np.mean(np.array(pase_n))
 
                             if prosody_type=='pitch':
-                                prosody_m, prosody_n = np.mean(librosa.yin(raw_audio_m), fmin=80, fmax=255), np.mean(librosa.yin(raw_audio_n), fmin=80, fmax=255)
+                                if len(raw_audio_m)>0:
+                                    p_m = np.mean(librosa.yin(raw_audio_m, fmin=80, fmax=255))  
+                                else:
+                                    p_m = 0
+                                if len(raw_audio_n)>0:
+                                    p_n = np.mean(librosa.yin(raw_audio_n, fmin=80, fmax=255)) if  len(raw_audio_n)>0 else 0
+                                else:
+                                    p_n = 0
                             elif prosody_type=='energy':
-                                prosody_m, prosody_n = np.mean([e*e for e in raw_audio_m.tolist()]), np.mean([e*e for e in raw_audio_n.tolist()])
+                                p_m, p_n = np.mean([e*e for e in raw_audio_m.tolist()]), np.mean([e*e for e in raw_audio_n.tolist()])
 
                             traj_m = torch.from_numpy(traj_m).float().to(device)
                             traj_n = torch.from_numpy(traj_n).float().to(device)
@@ -647,10 +687,13 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                             pase_m = torch.from_numpy(pase_m).float().to(device)
                             pase_n = torch.from_numpy(pase_n).float().to(device)
 
-                            prosody_m = torch.from_numpy(prosody_m).float().to(device)
-                            prosody_n = torch.from_numpy(prosody_n).float().to(device)
+                            p_m = torch.tensor([p_m]).float().to(device)
+                            p_n = torch.tensor([p_n]).float().to(device)
+
+                            prosody_m = torch.cat((prosody_m,p_m),0)
+                            prosody_n = torch.cat((prosody_n,p_n),0)
                             
-                            r_m, r_n = reward_network.forward_cal(traj_m, traj_n)
+                            _, _, r_m, r_n, _, _ = reward_network.forward(traj_m, traj_n)
                             
                             rewards_m = torch.cat((rewards_m,r_m),0)
                             rewards_n = torch.cat((rewards_n,r_n),0)
@@ -665,17 +708,17 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
 
                     # select which batch to process
                     j = k%num_batches
-                    batch = training_data[j]
+                    batch = cal_training_data[j]
                     if cal_type=='ann':
                         for b in batch:
-                            traj_m, traj_n = b
+                            traj_m, traj_n, _, _ = b
 
                             traj_m = np.array(traj_m)
                             traj_n = np.array(traj_n)
                             traj_m = torch.from_numpy(traj_m).float().to(device)
                             traj_n = torch.from_numpy(traj_n).float().to(device)
 
-                            r_m, r_n = reward_network.forward(traj_m, traj_n)
+                            _, _, r_m, r_n, _, _ = reward_network.forward(traj_m, traj_n)
 
                             rewards_m = torch.cat((rewards_m,r_m),0)
                             rewards_n = torch.cat((rewards_n,r_n),0)
@@ -686,19 +729,41 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                         for b in batch:
                             traj_m, traj_n, raw_audio_m, raw_audio_n = b
 
-                            if prosody_type=='pitch':
-                                prosody_m, prosody_n = np.mean(librosa.yin(raw_audio_m), fmin=80, fmax=255), np.mean(librosa.yin(raw_audio_n), fmin=80, fmax=255)
-                            elif prosody_type=='energy':
-                                prosody_m, prosody_n = np.mean([e*e for e in raw_audio_m.tolist()]), np.mean([e*e for e in raw_audio_n.tolist()])
-
                             traj_m, traj_n = np.array(traj_m), np.array(traj_n)
+                            raw_audio_m, raw_audio_n = np.array(raw_audio_m), np.array(raw_audio_n)
+
+                            if prosody_type=='pitch':
+                                # print(type(raw_audio_m))
+                                if len(raw_audio_m)==0:
+                                    print('raw audio m: ',len(raw_audio_m))
+                                if len(raw_audio_n)==0:
+                                    print('raw audio n: ',len(raw_audio_n))
+                                # print(raw_audio_m, raw_audio_n)
+                                # TODO: why is the length of raw audio 0??
+                                if len(raw_audio_m)>0:
+                                    # print(raw_audio_m.shape)
+                                    p_m = np.mean(librosa.yin(raw_audio_m, fmin=80, fmax=255))  
+                                else:
+                                    p_m = 0
+                                if len(raw_audio_n)>0:
+                                    # print(raw_audio_n.shape)
+                                    p_n = np.mean(librosa.yin(raw_audio_n, fmin=80, fmax=255)) 
+                                else:
+                                    p_n = 0
+                            elif prosody_type=='energy':
+                                p_m, p_n = np.mean([e*e for e in raw_audio_m.tolist()]), np.mean([e*e for e in raw_audio_n.tolist()])
+
+                            
                             traj_m = torch.from_numpy(traj_m).float().to(device)
                             traj_n = torch.from_numpy(traj_n).float().to(device)
 
-                            prosody_m = torch.from_numpy(prosody_m).float().to(device)
-                            prosody_n = torch.from_numpy(prosody_n).float().to(device)
+                            p_m = torch.tensor([p_m]).float().to(device)
+                            p_n = torch.tensor([p_n]).float().to(device)
 
-                            r_m, r_n = reward_network.forward(traj_m, traj_n)
+                            prosody_m = torch.cat((prosody_m,p_m),0)
+                            prosody_n = torch.cat((prosody_n,p_n),0)
+
+                            _, _, r_m, r_n, _, _ = reward_network.forward(traj_m, traj_n)
 
                             rewards_m = torch.cat((rewards_m,r_m),0)
                             rewards_n = torch.cat((rewards_n,r_n),0)
@@ -798,12 +863,12 @@ if __name__=="__main__":
     parser.add_argument('--data_dir', help="where agc data is located, e.g. path to atari_v1/")
     parser.add_argument('--num_snippets', default=6000, help="number of snippets to train the reward network with")
     parser.add_argument('--loss_type',default='rl_cgl_cal',type=str,help='losses to consider [rl, rl_cgl, rl_cal, cgl_cal, rl_cgl_cal]')
+    parser.add_argument('--cal_type',default='ann',type=str,help='losses to consider [ann, prosody_ann, pase, prosody_pase]')
+    parser.add_argument('--prosody_type',default='pitch',type=str,help='prosodic features to consider [pitch, energy]')
     parser.add_argument('--rl_mul', default=0.5, help="weight for ranking loss")
     parser.add_argument('--audio_mul', default=0.25, help="weight for audio loss")
     parser.add_argument('--gaze_mul', default=0.25, help="weight for gaze loss")
 
-    # parser.add_argument('--gaze_loss_only', action='store_true')
-    # parser.add_argument('--audio_loss_only', action='store_true')
     # parser.add_argument('--cgl_type',default='basic',type=str,help='way to combine cgl loss with pairwise ranking loss [basic, lagrangian]')
 
     args = parser.parse_args()
@@ -890,7 +955,10 @@ if __name__=="__main__":
     training_data = create_training_data(demonstrations, human_heatmap, num_snippets, min_snippet_length, max_snippet_length)
     training_obs, training_labels, training_gaze = training_data
 
-    cal_training_data = create_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, num_snippets)
+    if 'ann' in args.cal_type:
+        cal_training_data = create_CAL_training_data(demonstrations, audio_ann, raw_audio, num_snippets)
+    elif 'pase' in args.cal_type:
+        cal_training_data = create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, num_snippets)
 
     print("num training_obs", len(training_obs))
     print("num_labels", len(training_labels))
@@ -902,7 +970,7 @@ if __name__=="__main__":
     # if args.cgl_type=='basic' or args.gaze_loss_only:
     optimizer = optim.Adam(reward_net.parameters(),  lr=lr, weight_decay=weight_decay)
     learn_reward(reward_net, optimizer, training_data, cal_training_data, num_iter, l1_reg, args.reward_model_path, \
-        env_name, args.loss_type, float(args.rl_mul), float(args.gaze_mul), float(args.audio_mul))
+        env_name, args.loss_type, args.cal_type, args.prosody_type, float(args.rl_mul), float(args.gaze_mul), float(args.audio_mul))
     # elif args.cgl_type=='lagrangian':
     #     optimizer = optim.SGD(reward_net.parameters(), lr=0.01)#, momentum=0.9)
     #     learn_reward_differential_combine(reward_net, optimizer, training_data, num_iter, l1_reg, args.reward_model_path, env_name)
