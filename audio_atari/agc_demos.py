@@ -46,9 +46,9 @@ def MaxSkipAndWarpFrames(trajectory_dir, annotations, heatmaps, pase_vecs, raw_a
             warped = GrayScaleWarpImage(image)
             max_frames.append(warped)
             anns.append(annotations[i])
-            maps.append(heatmaps[i])
+            #maps.append(heatmaps[i])
             pase.append(pase_vecs[i])
-            raw.append(raw_audio[i][0])
+            raw.append(raw_audio[i])
     return max_frames, anns, maps, pase, raw
 
 def StackFrames(frames, annotations, heatmaps, pase_vecs, raw_audio):
@@ -77,10 +77,10 @@ def StackFrames(frames, annotations, heatmaps, pase_vecs, raw_audio):
                         break
 
             anns.append(ann)
-            maps.append(heatmaps[i])
+            #maps.append(heatmaps[i])
             pase.append(pase_vecs[i])
             raw.append(raw_audio[i])
-            assert len(raw[i-3]) != 0
+            #assert len(raw[i-3]) != 0
 
     return stacked, anns, maps, pase, raw
 
