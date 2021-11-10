@@ -177,10 +177,12 @@ class ContrastivePASELoss(nn.Module):
         representations = torch.cat([emb_i, emb_j], dim=0) # torch.Size([64, 1]) for batch size 32
 
         cos = nn.CosineSimilarity(dim=1, eps=1e-6)
+        # print('in CAL: ',pase_i.shape,pase_j.shape)
         pase_cosine = cos(pase_i, pase_j) # TODO: check shape is same as batch size
         #min_pase_cos, max_pase_cos = torch.min(pase_cosine), torch.max(pase_cosine)
         min_cos, max_cos = -1,1
         pase_cosine_scaled = (pase_cosine-min_cos)/(max_cos-min_cos)
+        pase_cosine_scaled_rep = torch.cat([pase_cosine_scaled, pase_cosine_scaled], dim=0)
 
         # compute similarity based on difference of rewards
         r1 = representations.unsqueeze(0).repeat(self.batch_size*2,1,1)
@@ -205,7 +207,7 @@ class ContrastivePASELoss(nn.Module):
         # based on how close the pair actually is (from cosine similarity of their audio embeddings)
         # construct a dummy example
         # scale the loss by the cosine similarity (converted between 0,1 from -1,1) of the audio embeddings
-        loss = torch.sum(pase_cosine_scaled * loss_partial) / (2 * self.batch_size)
+        loss = torch.sum(pase_cosine_scaled_rep * loss_partial) / (2 * self.batch_size)
         print('loss:',loss)
         return loss
 
@@ -235,6 +237,7 @@ class ContrastivePASEProsodyLoss(nn.Module):
         pase_cosine = cos(pase_i, pase_j) # TODO: check shape is same as batch size
         min_cos, max_cos = -1,1
         pase_cosine_scaled = (pase_cosine-min_cos)/(max_cos-min_cos)
+        pase_cosine_scaled_rep = torch.cat([pase_cosine_scaled, pase_cosine_scaled], dim=0)
 
         # compute similarity based on difference of rewards
         r1 = representations.unsqueeze(0).repeat(self.batch_size*2,1,1)
@@ -267,6 +270,6 @@ class ContrastivePASEProsodyLoss(nn.Module):
         # based on how close the pair actually is (from cosine similarity of their audio embeddings)
         # construct a dummy example
         # scale the loss by the cosine similarity (converted between 0,1 from -1,1) of the audio embeddings
-        loss = torch.sum(pase_cosine_scaled * loss_partial) / (2 * self.batch_size)
+        loss = torch.sum(pase_cosine_scaled_rep * loss_partial) / (2 * self.batch_size)
         print('loss:',loss)
         return loss

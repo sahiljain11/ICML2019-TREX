@@ -364,9 +364,10 @@ def create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, nu
 
     # for each demo, collect start and stop frame indices of yes and no indices (use conf = 0.8)
     # linear scan, yes start and stop boundary
-    indices, demo_idx = [], []
+    indices = []
     for j,demo in enumerate(audio_ann):
         # yes, no = [], []
+        demo_idx = []
         yes_start, no_start = False, False
         for i,frame_stack in enumerate(demo):
 
@@ -383,6 +384,7 @@ def create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, nu
                         stop_idx = i
                         assert(stop_idx>start_idx)
                         demo_idx.append([start_idx,stop_idx])
+                        # print('adding yes audio snippet:',start_idx,stop_idx,len(demo))
 
 
             # start of a 'no' speech segment
@@ -398,6 +400,7 @@ def create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, nu
                         stop_idx = i
                         assert(stop_idx>start_idx)
                         demo_idx.append([start_idx,stop_idx])
+                        # print('adding no audio snippet:',start_idx,stop_idx,len(demo))
 
         # print(j, ', yes: ', len(yes), ' no: ', len(no))
         indices.append(demo_idx)
@@ -440,7 +443,7 @@ def create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, nu
 
         # start point randomly selected from the left of the actual start
         # TODO: fix why stop idx > length of demo?
-        print(ti_stop, ti_stop_offset, ti_stop+right,len(demonstrations[ti]))
+        # print(ti_stop, ti_stop_offset, ti_stop+right,len(demonstrations[ti]))
         ti_start = np.random.randint(ti_start_offset, ti_start+1)
         ti_stop = np.random.randint(ti_stop, ti_stop_offset+1)
         assert(ti_stop>ti_start)
@@ -460,12 +463,21 @@ def create_PASE_CAL_training_data(demonstrations, audio_ann, pase, raw_audio, nu
         traj_i = demonstrations[ti][ti_start:ti_stop] 
         traj_j = demonstrations[tj][tj_start:tj_stop]
 
-        pase_i = np.mean(pase[ti][ti_start:ti_stop])
-        pase_j = np.mean(pase[tj][tj_start:tj_stop])
+        # print('pase: ',len(pase[ti]))
+        # print(pase[ti][0].shape, type(pase[ti][0]))
+        pase_i = torch.from_numpy(np.array(pase[ti][ti_start:ti_stop]))
+        pase_j = torch.from_numpy(np.array(pase[tj][tj_start:tj_stop]))
+        # print(a.shape)
+        mean_pase_i = torch.mean(pase_i,dim=0)
+        mean_pase_j = torch.mean(pase_j,dim=0)
+        # print(mean_pase.shape)
+        # pase_i = np.mean(pase[ti][ti_start:ti_stop])
+        # pase_j = np.mean(pase[tj][tj_start:tj_stop])
+        # print('pase_i: ',pase_i)
 
         raw_audio_i = np.concatenate(raw_audio[ti][ti_start:ti_stop])
         raw_audio_j = np.concatenate(raw_audio[tj][tj_start:tj_stop])
-        snippet_pairs.append((traj_i,traj_j, pase_i, pase_j, raw_audio_i, raw_audio_j))
+        snippet_pairs.append((traj_i,traj_j, mean_pase_i, mean_pase_j, raw_audio_i, raw_audio_j))
 
 
     print('snippet pairs: ', len(snippet_pairs))
@@ -635,6 +647,7 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                 # CAL
                 rewards_m, rewards_n = torch.empty((0), dtype=torch.float, device = 'cuda'), torch.empty((0), dtype=torch.float, device = 'cuda')
                 prosody_m, prosody_n = torch.empty((0), dtype=torch.float, device = 'cuda'), torch.empty((0), dtype=torch.float, device = 'cuda')
+                pase_m, pase_n = torch.empty((0), dtype=torch.float, device = 'cuda'), torch.empty((0), dtype=torch.float, device = 'cuda')
                 if cal_type=='pase' or cal_type=='prosody_pase':
                     # batch_size = 32
                     num_batches = int(len(cal_training_data)/batch_size)
@@ -643,16 +656,24 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                     
                     if cal_type=='pase':
                         for m in range(j*batch_size,min((j+1)*batch_size,len(cal_training_data))):
-                            traj_m, traj_n, pase_m, pase_n, _, _ = cal_training_data[m]
+                            traj_m, traj_n, mean_pase_m, mean_pase_n, _, _ = cal_training_data[m]
                             
                             traj_m, traj_n = np.array(traj_m), np.array(traj_n)
-                            pase_m, pase_n = np.mean(np.array(pase_m)), np.mean(np.array(pase_n))
+                            # mean_pase_m, pase_n = np.mean(np.array(pase_m)), np.mean(np.array(pase_n))
                             
                             traj_m = torch.from_numpy(traj_m).float().to(device)
                             traj_n = torch.from_numpy(traj_n).float().to(device)
 
-                            pase_m = torch.from_numpy(pase_m).float().to(device)
-                            pase_n = torch.from_numpy(pase_n).float().to(device)
+                            mean_pase_m = mean_pase_m.float().to(device)
+                            mean_pase_n = mean_pase_n.float().to(device)
+
+                            if pase_m.shape[0] ==0:
+                                pase_m = torch.unsqueeze(mean_pase_m,0)
+                                pase_n = torch.unsqueeze(mean_pase_n,0)
+                            else:
+                                # print(pase_m.shape, mean_pase_m.shape)
+                                pase_m = torch.cat((pase_m,torch.unsqueeze(mean_pase_m,0)),0)
+                                pase_n = torch.cat((pase_n,torch.unsqueeze(mean_pase_n,0)),0)
                             
                             _, _, r_m, r_n, _, _ = reward_network.forward(traj_m, traj_n)
                             
@@ -664,10 +685,10 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
 
                     elif cal_type=='prosody_pase':
                         for m in range(j*batch_size,min((j+1)*batch_size,len(cal_training_data))):
-                            traj_m, traj_n, pase_m, pase_n, raw_audio_m, raw_audio_n = cal_training_data[m]
+                            traj_m, traj_n, mean_pase_m, mean_pase_n, raw_audio_m, raw_audio_n = cal_training_data[m]
                             
                             traj_m, traj_n = np.array(traj_m), np.array(traj_n)
-                            pase_m, pase_n = np.mean(np.array(pase_m)), np.mean(np.array(pase_n))
+                            # pase_m, pase_n = np.mean(np.array(pase_m)), np.mean(np.array(pase_n))
 
                             if prosody_type=='pitch':
                                 if len(raw_audio_m)>0:
@@ -684,8 +705,15 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                             traj_m = torch.from_numpy(traj_m).float().to(device)
                             traj_n = torch.from_numpy(traj_n).float().to(device)
 
-                            pase_m = torch.from_numpy(pase_m).float().to(device)
-                            pase_n = torch.from_numpy(pase_n).float().to(device)
+                            mean_pase_m = mean_pase_m.float().to(device)
+                            mean_pase_n = mean_pase_n.float().to(device)
+
+                            if pase_m.shape[0] ==0:
+                                pase_m = torch.unsqueeze(mean_pase_m,0)
+                                pase_n = torch.unsqueeze(mean_pase_n,0)
+                            else:
+                                pase_m = torch.cat((pase_m,torch.unsqueeze(mean_pase_m,0)),0)
+                                pase_n = torch.cat((pase_n,torch.unsqueeze(mean_pase_n,0)),0)
 
                             p_m = torch.tensor([p_m]).float().to(device)
                             p_n = torch.tensor([p_n]).float().to(device)
@@ -768,6 +796,7 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                             rewards_m = torch.cat((rewards_m,r_m),0)
                             rewards_n = torch.cat((rewards_n,r_n),0)
 
+                    
                         audio_loss = audio_scale*cal_loss_criterion(rewards_m, rewards_n, prosody_m, prosody_n)
 
 
