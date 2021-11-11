@@ -715,8 +715,8 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                                 pase_m = torch.cat((pase_m,torch.unsqueeze(mean_pase_m,0)),0)
                                 pase_n = torch.cat((pase_n,torch.unsqueeze(mean_pase_n,0)),0)
 
-                            p_m = torch.tensor([p_m]).float().to(device)
-                            p_n = torch.tensor([p_n]).float().to(device)
+                            p_m = torch.tensor([p_m]).float().to(device).unsqueeze(0)
+                            p_n = torch.tensor([p_n]).float().to(device).unsqueeze(0)
 
                             prosody_m = torch.cat((prosody_m,p_m),0)
                             prosody_n = torch.cat((prosody_n,p_n),0)
@@ -785,8 +785,8 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                             traj_m = torch.from_numpy(traj_m).float().to(device)
                             traj_n = torch.from_numpy(traj_n).float().to(device)
 
-                            p_m = torch.tensor([p_m]).float().to(device)
-                            p_n = torch.tensor([p_n]).float().to(device)
+                            p_m = torch.tensor([p_m]).float().to(device).unsqueeze(0)
+                            p_n = torch.tensor([p_n]).float().to(device).unsqueeze(0)
 
                             prosody_m = torch.cat((prosody_m,p_m),0)
                             prosody_n = torch.cat((prosody_n,p_n),0)
@@ -796,9 +796,9 @@ def learn_reward(reward_network, optimizer, training_data, cal_training_data, nu
                             rewards_m = torch.cat((rewards_m,r_m),0)
                             rewards_n = torch.cat((rewards_n,r_n),0)
 
-                    
+                            # print('rew/prosody: ',rewards_m.shape, prosody_m.shape)
+   
                         audio_loss = audio_scale*cal_loss_criterion(rewards_m, rewards_n, prosody_m, prosody_n)
-
 
                     writer.add_scalar('CAL', audio_loss.item(), k)
 
@@ -860,7 +860,7 @@ def calc_accuracy(reward_network, training_inputs, training_outputs):
             traj_j = torch.from_numpy(traj_j).float().to(device)
 
             #forward to get logits
-            outputs, _, _, _ = reward_network.forward(traj_i, traj_j)
+            outputs, _, _, _, _, _ = reward_network.forward(traj_i, traj_j)
             #print(outputs)
             _, pred_label = torch.max(outputs,0)
             #print(pred_label)

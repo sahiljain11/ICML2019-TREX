@@ -34,7 +34,7 @@ def write_script(args):
         f.write('#SBATCH --job-name PPO'+'_'+env[0]+extra+'_'+seed+'\n')
         f.write('#SBATCH --output=logs/PPO'+'_'+env[0]+extra+'_'+seed+'_%j.out\n')
         f.write('#SBATCH --error=logs/PPO'+'_'+env[0]+extra+'_'+seed+'_%j.err\n')
-        f.write('#SBATCH --mail-user=akankshasaran@utexas.edu\n')
+        f.write('#SBATCH --mail-user=akanksha.saran.iitj@gmail.com\n')
         f.write('#SBATCH --mail-type=END,FAIL,REQUEUE\n')
         f.write('#SBATCH --partition '+server+'\n')
         f.write('#SBATCH --nodes=1\n')
@@ -54,7 +54,8 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--env', default='mspacman', help='Select the environment name to run, i.e. mspacman')
-    parser.add_argument('--exp', default='cal', help='Select the exp to run [cal, cgl, rl_cal, rl_cgl, cgl_cal, rl_cgl_cal]')
+    parser.add_argument('--exp', default='cal', help='Select the exp to run [cal, cgl, rl_cal, rl_cgl, cgl_cal, rl_cgl_cal, rl_cgl_correct,\
+        rl_cal_ann, rl_cal_pase, rl_cal_prosody_ann_pitch, rl_cal_prosody_ann_energy, rl_cal_prosody_pase_pitch, rl_cal_prosody_pase_energy]')
     parser.add_argument('--cluster', default='titans', help='Select the cluster to run jobs [titans, dgx]')
 
     args = parser.parse_args()
