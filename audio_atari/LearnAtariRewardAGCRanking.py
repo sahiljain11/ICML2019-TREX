@@ -73,7 +73,7 @@ def create_training_data_prev(demonstrations, num_trajs, num_snippets, min_snipp
     print("maximum traj length", max_traj_length)
     return training_obs, training_labels
 
-def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env_name, human_ann):
+def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env_name, human_ann, random_ranking):
     #collect training data
     max_traj_length = 0
     training_obs = []
@@ -141,6 +141,13 @@ def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_le
             label = 0
         else:
             label = 1
+
+        if random_ranking:
+            if np.random.rand(1)[0] > 0.5:
+                label = 1
+            else:
+                label = 0
+
         training_obs.append((traj_i, traj_j))
         training_labels.append(label)
 
@@ -323,6 +330,9 @@ if __name__=="__main__":
     print("trajectory path: " + str(args.data_dir + "/trajectories"))
     print("path existence:  " + str(os.path.exists(args.data_dir + "/trajectories")))
 
+    if args.variation != 0 and args.variation != 1 and args.variation != 2:
+        raise Exception("Variation not allowed")
+
     env_type = "atari"
     print(env_type)
     #set seeds
@@ -385,7 +395,7 @@ if __name__=="__main__":
     if args.variation == 0:
         training_obs, training_labels = create_training_data_prev(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env)
     else:
-        training_obs, training_labels = create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env, human_ann)
+        training_obs, training_labels = create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env, human_ann, args.variation == 2)
     print("num training_obs", len(training_obs))
     print("num_labels", len(training_labels))
     # Now we create a reward network and optimize it using the training data.
