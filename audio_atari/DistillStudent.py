@@ -166,6 +166,8 @@ def learn_reward(teacher, student, optimizer, training_inputs, training_outputs,
     softmax = nn.Softmax()
     ALPHA = 0.9
 
+    student.train()
+
     #print(training_data[0])
     cum_loss = 0.0
     training_data = list(zip(training_inputs, training_outputs))
@@ -211,10 +213,8 @@ def learn_reward(teacher, student, optimizer, training_inputs, training_outputs,
                 print("epoch {}:{} loss {}".format(epoch,i, cum_loss))
                 print(f"abs_rewards: {abs_rewards.item()}\n")
                 cum_loss = 0.0
-                torch.save(reward_net.state_dict(), checkpoint_dir)
+                torch.save(student.state_dict(), checkpoint_dir)
     print("finished training")
-
-
 
 
 
@@ -377,18 +377,20 @@ if __name__=="__main__":
     teacher.to(device)
     import torch.optim as optim
 
+    teacher.load_state_dict(torch.load(args.teacher))
+    teacher.eval()
     optimizer = optim.Adam(student.parameters(),  lr=lr, weight_decay=weight_decay)
     learn_reward(teacher, student, optimizer, training_obs, training_labels, num_iter, l1_reg, args.reward_model_path)
     
 
-    torch.save(reward_net.state_dict(), args.reward_model_path)
+    torch.save(student.state_dict(), args.reward_model_path)
 
     with torch.no_grad():
-        pred_returns = [predict_traj_return(reward_net, traj) for traj in demonstrations]
+        pred_returns = [predict_traj_return(student, traj) for traj in demonstrations]
     for i, p in enumerate(pred_returns):
         print(i,p,sorted_returns[i])
 
-    print("accuracy", calc_accuracy(reward_net, training_obs, training_labels))
+    print("accuracy", calc_accuracy(student, training_obs, training_labels))
 
 
     print(f"Total time: {time.time() - start}")
