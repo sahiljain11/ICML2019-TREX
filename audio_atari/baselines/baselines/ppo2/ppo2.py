@@ -109,6 +109,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
     if load_path is not None:
         model.load(load_path)
+        start = int(load_path.split('/')[-1]) + 1
+    else:
+        start = 1
     # Instantiate the runner object
     runner = Runner(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam)
     if eval_env is not None:
@@ -122,7 +125,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     tfirststart = time.time()
 
     nupdates = total_timesteps//nbatch
-    for update in range(1, nupdates+1):
+    for update in range(start, nupdates+1):
         assert nbatch % nminibatches == 0
         # Start timer
         tstart = time.time()
