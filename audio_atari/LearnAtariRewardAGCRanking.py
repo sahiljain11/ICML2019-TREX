@@ -15,8 +15,8 @@ from run_test import *
 import os
 
 """
-python LearnAtariRewardAGC.py --env_name mspacman --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/mspacman.params
-python LearnAtariRewardAGC.py --env_name spaceinvaders --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/spaceinvaders0.params --seed 0
+python LearnAtariRewardAGCRanking.py --env_name mspacman --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/mspacman.params
+python LearnAtariRewardAGCRanking.py --env_name spaceinvaders --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/spaceinvaders0.params --seed 0
 """
 
 '''

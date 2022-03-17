@@ -125,6 +125,12 @@ def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_le
         max_traj_length = max(max_traj_length, len(traj_i), len(traj_j))
 
 
+    """
+    1) First variant you sort the entire demonstration by the count (or duration) of the number of 
+    yes/no annotations
+    2) Second variant you sample snippets that have audio chunks. Take 50/100 samples around that chunk
+    """
+
     #fixed size snippets with progress prior
     for n in range(num_snippets):
         ti = 0

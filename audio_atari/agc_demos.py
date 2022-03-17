@@ -46,7 +46,7 @@ def MaxSkipAndWarpFrames(trajectory_dir, annotations, heatmaps, pase_vecs, raw_a
             warped = GrayScaleWarpImage(image)
             max_frames.append(warped)
             anns.append(annotations[i])
-            maps.append(heatmaps[i])
+            #maps.append(heatmaps[i])
             pase.append(pase_vecs[i])
             raw.append(raw_audio[i])
     return max_frames, anns, maps, pase, raw
@@ -77,11 +77,12 @@ def StackFrames(frames, annotations, heatmaps, pase_vecs, raw_audio):
                         break
 
             anns.append(ann)
-            maps.append(heatmaps[i])
+            #maps.append(heatmaps[i])
             pase.append(pase_vecs[i])
             raw.append(raw_audio[i])
             #assert len(raw[i-3]) != 0
 
+    print(f"StackFrame length: {len(raw)}")
     return stacked, anns, maps, pase, raw
 
 
@@ -116,9 +117,9 @@ def get_sorted_traj_indices(env_name, dataset):
     pase        = dataset.pasevec[g]
     raw_audio   = dataset.raw_audio[g]
 
-    for k in dataset.annotations[g].keys():
-        assert len(dataset.annotations[g][k]) == len(dataset.pasevec[g][k])
-        assert len(dataset.annotations[g][k]) == len(dataset.raw_audio[g][k])
+    #for k in dataset.annotations[g].keys():
+        #assert len(dataset.annotations[g][k]) == len(dataset.pasevec[g][k])
+        #assert len(dataset.annotations[g][k]) == len(dataset.raw_audio[g][k])
         #assert len(dataset.annotations[g][k]) == len(dataset.heatmaps[g][k])
 
     sorted_traj_indices = [x for _, x in sorted(zip(traj_scores, traj_indices), key=lambda pair: pair[0])]

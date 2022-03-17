@@ -27,6 +27,10 @@ OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked
 OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space01 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders0.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
 OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space10 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
 OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space11 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
+
+
+With the 'nice' command so as to not completely hold the computer
+OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest12 taskset -c 1-60 nice -n 19 python -m baselines.run --alg=ppo2 --env=SeaquestNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/seaquest1.params --seed 2 --num_timesteps=5e7 --save_interval=500 --num_env 9
 '''
 
 def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env_name):

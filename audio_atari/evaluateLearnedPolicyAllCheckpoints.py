@@ -1,4 +1,7 @@
 import os
+
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+
 import sys
 import pickle
 import gym
@@ -11,9 +14,8 @@ import string
 import matplotlib.pyplot as plt
 import argparse
 import tensorflow as tf
-
 """
-taskset -c 1-60 nice -n 20 python evaluateLearnedPolicyAllCheckpoints.py --env_name spaceinvaders --checkpointpath /home/sahilj/forked/ICML2019-TREX/tflogs_spaceinvaders00/checkpoints/
+taskset -c 1-60 nice -n 20 python evaluateLearnedPolicyAllCheckpoints.py --env_name seaquest -l /home/sahilj/forked/ICML2019-TREX/tflogs_seaquest12 -n SentimentRanking1_Seed2
 """
 
 def evaluate_learned_policy(env_name, checkpointpath):
@@ -98,50 +100,55 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description=None)
     parser.add_argument('--seed', default=1234, help="random seed for experiments")
     parser.add_argument('--env_name', default='', help='Select the environment name to run, i.e. pong')
-    parser.add_argument('--checkpointdir', default='', help='directory path to checkpoint to run eval on')
     parser.add_argument('-l', '--pathlist', action='append', help='path to checkpoints to run eval on')
+    parser.add_argument('-n', '--listnames', action='append', help='names for each checkpoint to be labeled')
     args = parser.parse_args()
     env_name = args.env_name
-    #set seeds
-    seed = int(args.seed)
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    tf.set_random_seed(seed)
 
-    all_variations = []
+    #set seeds
+    #seed = int(args.seed)
+    #torch.manual_seed(seed)
+    #np.random.seed(seed)
+    #tf.compat.v1.set_random_seed(seed)
+
+    colors = ['blue', 'orange', 'green', 'purple', 'brown', 'red']
+    c = -1
+    all_variations = args.listnames
 
     for l in args.pathlist:
+        print("*"*10)
+        c += 1
         all_x    = []
         all_mean = []
         all_std  = []
 
-        variation = l.split(f'tflogs_{env_name}')[1]
-        all_variations.append(variation)
+        #variation = l.split(f'tflogs_small_{env_name}')[1]
+        #variation = l.split(f'{env_name}_')[1]
+        #all_variations.append(variation)
+        variation = all_variations[c]
 
-        complete_path = os.path.join(args.checkpointdir, l)
-        complete_path = os.path.join(complete_path, 'checkpoints')
+        complete_path = os.path.join(l, 'checkpoints')
 
         for name in sorted(os.listdir(complete_path)):
             num = int(name)
-            print(num)
+            #print(num)
 
             checkpointpath = os.path.join(complete_path, name)
             all_x.append(num)
-            print("*"*10)
-            print(env_name)
-            print("*"*10)
+            #print("*"*10)
+            #print(env_name)
+            #print("*"*10)
 
             res = "./eval/" + env_name + '_' + checkpointpath.replace("/","_") + "_evaluation.txt"
 
             # see if returns has already been computed
             if os.path.exists(res):
-                print(f'Cached: {checkpointpath}')
+                #print(f'Cached: {checkpointpath}')
                 returns = already_computed(res)
                 val = sum(returns)
             else:
-                raise Exception('stop')
                 returns = evaluate_learned_policy(env_name, checkpointpath)
-            #write returns to file
+                #write returns to file
 
                 val = 0.0
                 f = open("./eval/" + env_name + '_'+ checkpointpath.replace("/","_") + "_evaluation.txt",'w')
@@ -151,25 +158,24 @@ if __name__=="__main__":
                     val += r
                 f.close()
 
-            print(f"Total: {val}")
-            # print('Total: {}'.format(val))
             val = val / len(returns)
             err = np.std(returns)/np.sqrt(len(returns))
-            # print('Average: {}'.format(val))
-            print(f"Average: {val}")
-            print(f"Std err: {err}")
 
-            print(f"Stored results in {res}.txt")
-            # print("Stored results in {}.txt".format(res))
+            #print(f"Stored results in {res}.txt")
 
             all_mean.append(val)
             all_std.append(err)
 
+        print(complete_path)
+        print(f"Average: {val}")
+        print(f"Std err: {err}")
         x = np.array(all_x)
         y = np.array(all_mean)
-        e = np.array(all_std)
+        e = np.absolute(np.array(all_std))
 
-        plt.errorbar(x, y, e, fmt='o', markersize=5, capsize=5, label=variation)
+        plt.plot(x, y, label=variation, color=colors[c])
+        plt.fill_between(x, y - e, y + e, alpha=0.5, facecolor=colors[c])
+    print("*"*10)
 
     name = ''
     for i in range(0, len(all_variations)):
@@ -183,5 +189,7 @@ if __name__=="__main__":
     plt.ylabel('PPO Rewards')
     plt.legend(all_variations)
 
-    plt.savefig(f'./eval/{env_name}{name}.png')
+    plt.savefig(f'./images/{env_name}{name}.png')
+
+    print(f'Stored image in ./images/{env_name}{name}.png')
 
