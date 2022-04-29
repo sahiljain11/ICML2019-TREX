@@ -115,6 +115,11 @@ if __name__=="__main__":
     c = -1
     all_variations = args.listnames
 
+    f = open('viable_seaquest.txt')
+    viable_seaquest = f.readlines()
+    for i in range(len(viable_seaquest)):
+        viable_seaquest[i] = viable_seaquest[i].strip()
+
     for l in args.pathlist:
         print("*"*10)
         c += 1
@@ -129,7 +134,18 @@ if __name__=="__main__":
 
         complete_path = os.path.join(l, 'checkpoints')
 
-        for name in sorted(os.listdir(complete_path)):
+        all_seed_paths = []
+        for i in range(0, 3):
+            single_seed = f'{l[0:len(l)-1]}{i}'
+            single_seed_checkpoint = os.path.join(single_seed, 'checkpoints')
+
+            #if os.path.exists(f'{single_seed}/43000'):
+            if single_seed in viable_seaquest:
+                all_seed_paths.append(single_seed_checkpoint)
+
+        all_checkpoints_list = sorted(os.listdir(complete_path))
+
+        for name in all_checkpoints_list:
             num = int(name)
             #print(num)
 
@@ -143,20 +159,32 @@ if __name__=="__main__":
 
             # see if returns has already been computed
             if os.path.exists(res):
-                #print(f'Cached: {checkpointpath}')
-                returns = already_computed(res)
-                val = sum(returns)
-            else:
-                returns = evaluate_learned_policy(env_name, checkpointpath)
-                #write returns to file
-
+                print(f'Cached: {checkpointpath}')
                 val = 0.0
-                f = open("./eval/" + env_name + '_'+ checkpointpath.replace("/","_") + "_evaluation.txt",'w')
-                #f = open(f"./eval/{res}.txt", "w")
-                for r in returns:
-                    f.write("{}\n".format(r))
-                    val += r
-                f.close()
+                for seed_path in all_seed_paths:
+                    seed_path = os.path.join(seed_path, name)
+                    seed_res = "./eval/" + env_name + '_'+ seed_path.replace("/","_") + "_evaluation.txt"
+                    returns = already_computed(seed_res)
+                    val += sum(returns)
+                val = val / len(all_seed_paths)
+            else:
+                val = 0.0
+                
+                for seed_path in all_seed_paths:
+                    seed_path = os.path.join(seed_paths, name)
+                    returns = evaluate_learned_policy(env_name, seed_path)
+                    print(seed_path)
+                    #write returns to file
+
+                    f = open("./eval/" + env_name + '_'+ seed_path.replace("/","_") + "_evaluation.txt",'w')
+                    #f = open(f"./eval/{res}.txt", "w")
+                    for r in returns:
+                        f.write("{}\n".format(r))
+                        val += r
+                    f.close()
+
+                # divide by 3 different seeds
+                val = val / len(all_seed_paths)
 
             val = val / len(returns)
             err = np.std(returns)/np.sqrt(len(returns))
@@ -167,8 +195,12 @@ if __name__=="__main__":
             all_std.append(err)
 
         print(complete_path)
-        print(f"Average: {val}")
-        print(f"Std err: {err}")
+        
+        max_v = max(all_mean)
+        max_i = all_mean.index(max_v)
+        print(f"Best Average: {max_v:.2f} +/- {all_std[max_i]:.2f} at checkpoint {all_checkpoints_list[max_i]}")
+        print(f"Last Average: {val:.2f} +/- {err:.2f} at checkpoint {all_checkpoints_list[-1]}")
+
         x = np.array(all_x)
         y = np.array(all_mean)
         e = np.absolute(np.array(all_std))
@@ -184,7 +216,7 @@ if __name__=="__main__":
         else:
             name += f'_{all_variations[i]}'
 
-    plt.title(f'{env_name} {name}')
+    plt.title(f'{env_name}')
     plt.xlabel('PPO Checkpoints')
     plt.ylabel('PPO Rewards')
     plt.legend(all_variations)
