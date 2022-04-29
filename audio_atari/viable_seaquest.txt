@@ -1,0 +1,10 @@
+/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest02
+/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest_uncurated_nobug10
+/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest_uncurated_nobug12
+/home/asaran/ICML2019-TREX-audio_gaze/audio_atari/ppo_models/seaquest_0
+/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest_random0
+/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest_curate00
+/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest_curate01
+/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest_curate02
+/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest_nobug10
+/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest_nobug12
