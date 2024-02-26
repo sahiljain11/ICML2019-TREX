@@ -3,8 +3,8 @@
 # env = ['spaceinvaders','SpaceInvaders']
 # env = ['mspacman','MsPacman']
 envs = [['seaquest','Seaquest'],['spaceinvaders','SpaceInvaders'],['mspacman','MsPacman']]
-server = 'titans' 
-# server = 'dgx'
+# server = 'titans' 
+server = 'dgx'
 
 # rl_mul, gaze_mul, audio_mul = '0.35', '0.05', '0.6'
 # rl_mul, gaze_mul, audio_mul = '0.1', '0.45', '0.45'
@@ -22,13 +22,22 @@ server = 'titans'
 
 # after updating the CAL loss with a single term
 prosody_type = 'pitch'
-extra, extra_option = '_rl_cgl_correct', 'rl_cgl'
+# extra, extra_option = '_rl_cgl_correct', 'rl_cgl'
 # extra, extra_option, cal_type = '_rl_cal_ann', 'rl_cal', 'ann'
 # extra, extra_option, cal_type, prosody_type = '_rl_cal_prosody_ann_pitch', 'rl_cal', 'prosody_ann', 'pitch'
 # extra, extra_option, cal_type, prosody_type = '_rl_cal_prosody_ann_energy', 'rl_cal', 'prosody_ann', 'energy'
 # extra, extra_option, cal_type = '_rl_cal_pase', 'rl_cal', 'pase'
 # extra, extra_option, cal_type, prosody_type = '_rl_cal_prosody_pase_pitch', 'rl_cal', 'prosody_pase', 'pitch'
 # extra, extra_option, cal_type, prosody_type = '_rl_cal_prosody_pase_energy', 'rl_cal', 'prosody_pase', 'energy'
+
+
+# RL+ CGL +CAL
+# extra, extra_option, cal_type = '_rl_cgl_cal_ann', 'rl_cgl_cal', 'ann'
+# extra, extra_option, cal_type, prosody_type = '_rl_cgl_cal_prosody_ann_pitch', 'rl_cgl_cal', 'prosody_ann', 'pitch'
+# extra, extra_option, cal_type, prosody_type = '_rl_cgl_cal_prosody_ann_energy', 'rl_cgl_cal', 'prosody_ann', 'energy'
+# extra, extra_option, cal_type = '_rl_cgl_cal_pase', 'rl_cgl_cal', 'pase'
+# extra, extra_option, cal_type, prosody_type = '_rl_cgl_cal_prosody_pase_pitch', 'rl_cgl_cal', 'prosody_pase', 'pitch'
+extra, extra_option, cal_type, prosody_type = '_rl_cgl_cal_prosody_pase_energy', 'rl_cgl_cal', 'prosody_pase', 'energy'
 
 for env in envs:
     bash_file_name = 'reward/reward_'+env[0]+extra+'.sh'
@@ -49,13 +58,13 @@ for env in envs:
     f.write('#SBATCH --cpus-per-task=4\n')
 
     # FOR CGL
-    f.write('python LearnAudioGazeRewardAGC.py --env_name '+env[0]+' --data_dir ./frames --reward_model_path ./multimodal_reward_models/'+env[0]+extra+' --loss_type '+extra_option)
+    # f.write('python LearnAudioGazeRewardAGC.py --env_name '+env[0]+' --data_dir ./frames --reward_model_path ./multimodal_reward_models/'+env[0]+extra+' --loss_type '+extra_option)
     
     # f.write('python LearnAudioGazeRewardAGC.py --env_name '+env[0]+' --data_dir ./frames --reward_model_path ./multimodal_reward_models/'+env[0]+extra+\
     #     ' --loss_type '+extra_option+' --rl_mul '+rl_mul+' --gaze_mul '+gaze_mul+' --audio_mul '+audio_mul)
 
 
-    # f.write('python LearnAudioGazeRewardAGC.py --env_name '+env[0]+' --data_dir ./frames --reward_model_path ./multimodal_reward_models/'+env[0]+extra+\
-    #     ' --loss_type '+extra_option+' --prosody_type '+prosody_type+' --cal_type '+cal_type)
+    f.write('python LearnAudioGazeRewardAGC.py --env_name '+env[0]+' --data_dir ./frames --reward_model_path ./multimodal_reward_models/'+env[0]+extra+\
+        ' --loss_type '+extra_option+' --prosody_type '+prosody_type+' --cal_type '+cal_type)
 
     f.close()
