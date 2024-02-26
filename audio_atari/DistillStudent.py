@@ -1,7 +1,7 @@
 import argparse
-import agc_demos
-import agc.dataset as ds
-
+import os
+import os.path as path
+import json
 import pickle
 import gym
 import time
@@ -11,64 +11,40 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from run_test import *
+from baselines.common.trex_utils import preprocess
+from keras.utils import to_categorical
+import matplotlib.pyplot as plt
 
-import os
+import librosa
+from robotaxi.gameplay.openaiwrappers import make_openai_gym_environment
+from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
+import pickle
 
-"""
-python LearnAtariRewardAGC.py --env_name mspacman --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/mspacman.params
-python LearnAtariRewardAGC.py --env_name spaceinvaders --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/spaceinvaders0.params --seed 0
-"""
+from preprocessing import generate_demos
+from preprocessing import create_training_data
 
-'''
-To train on a reward network, use the following command:
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs python -m baselines.run --alg=ppo2 --env=MsPacmanNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/mspacman.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space00 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders0.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space01 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders0.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space10 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space11 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
+from DistillModel import TeacherNet, StudentNet
 
 
-With the 'nice' command so as to not completely hold the computer
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest12 taskset -c 1-60 nice -n 19 python -m baselines.run --alg=ppo2 --env=SeaquestNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/seaquest1.params --seed 2 --num_timesteps=5e7 --save_interval=500 --num_env 9
-'''
 
-def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env_name):
+def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env_name, human_ann):
     #collect training data
     max_traj_length = 0
     training_obs = []
     training_labels = []
     num_demos = len(demonstrations)
 
-    #add full trajs
-    for n in range(num_trajs):
-        ti = 0
-        tj = 0
-        #only add trajectories that are different returns
-        while(ti == tj):
-            #pick two random demonstrations
-            ti = np.random.randint(num_demos)
-            tj = np.random.randint(num_demos)
-        #print(ti, tj)
-        #create random partial trajs by finding random start frame and random skip frame
-        si = np.random.randint(6)
-        sj = np.random.randint(6)
-        step = np.random.randint(3,7)
-        #step_j = np.random.randint(2,6)
-        #print("si,sj,skip",si,sj,step)
-        traj_i = demonstrations[ti][si::step]  #slice(start,stop,step)
-        traj_j = demonstrations[tj][sj::step]
-        #max_traj_length = max(max_traj_length, len(traj_i), len(traj_j))
-        if ti > tj:
-            label = 0
-        else:
-            label = 1
-        #print(label)
-        training_obs.append((traj_i, traj_j))
-        training_labels.append(label)
-        max_traj_length = max(max_traj_length, len(traj_i), len(traj_j))
+    encoded_ann = [None] * len(human_ann)
+    for i, game in enumerate(human_ann):
+        encoded_ann[i] = [None] * len(game)
+        for j, word_dict in enumerate(game):
+            if word_dict['word'] == 'yes':
+                encoded_ann[i][j] = np.array([1, 0, 0])
+            elif word_dict['word'] == 'no':
+                encoded_ann[i][j] = np.array([0, 1, 0])
+            else:
+                encoded_ann[i][j] = np.array([0, 0, 1])
 
-  
     #fixed size snippets with progress prior
     for n in range(num_snippets):
         ti = 0
@@ -94,68 +70,35 @@ def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_le
         #print("start", ti_start, tj_start)
         traj_i = demonstrations[ti][ti_start:ti_start+rand_length:2] #skip everyother framestack to reduce size
         traj_j = demonstrations[tj][tj_start:tj_start+rand_length:2]
+
+        human_i = encoded_ann[ti][ti_start:ti_start+rand_length:2]
+        human_j = encoded_ann[tj][tj_start:tj_start+rand_length:2]
     
         max_traj_length = max(max_traj_length, len(traj_i), len(traj_j))
         if ti > tj:
             label = 0
         else:
             label = 1
-        training_obs.append((traj_i, traj_j))
+        training_obs.append((traj_i, traj_j, human_i, human_j))
         training_labels.append(label)
 
     print("maximum traj length", max_traj_length)
     return training_obs, training_labels
 
 
-
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-        self.conv1 = nn.Conv2d(4, 16, 7, stride=3)
-        self.conv2 = nn.Conv2d(16, 16, 5, stride=2)
-        self.conv3 = nn.Conv2d(16, 16, 3, stride=1)
-        self.conv4 = nn.Conv2d(16, 16, 3, stride=1)
-        self.fc1 = nn.Linear(784, 64)
-        self.fc2 = nn.Linear(64, 1)
-
-
-
-    def cum_return(self, traj):
-        '''calculate cumulative return of trajectory'''
-        sum_rewards = 0
-        sum_abs_rewards = 0
-        x = traj.permute(0,3,1,2) #get into NCHW format
-        #compute forward pass of reward network
-        x = F.leaky_relu(self.conv1(x))
-        x = F.leaky_relu(self.conv2(x))
-        x = F.leaky_relu(self.conv3(x))
-        x = F.leaky_relu(self.conv4(x))
-        x = x.reshape(-1, 784)
-        x = F.leaky_relu(self.fc1(x))
-        r = self.fc2(x)
-        sum_rewards += torch.sum(r)
-        sum_abs_rewards += torch.sum(torch.abs(r))
-        return sum_rewards, sum_abs_rewards
-
-
-
-    def forward(self, traj_i, traj_j):
-        '''compute cumulative return for each trajectory and return logits'''
-        cum_r_i, abs_r_i = self.cum_return(traj_i)
-        cum_r_j, abs_r_j = self.cum_return(traj_j)
-        return torch.cat((cum_r_i.unsqueeze(0), cum_r_j.unsqueeze(0)),0), abs_r_i + abs_r_j
-
-
-
-
-
-def learn_reward(reward_network, optimizer, training_inputs, training_outputs, num_iter, l1_reg, checkpoint_dir):
+def learn_reward(teacher, student, optimizer, training_inputs, training_outputs, num_iter, l1_reg, checkpoint_dir):
     #check if gpu available
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # Assume that we are on a CUDA machine, then this should print a CUDA device:
     print(device)
-    loss_criterion = nn.CrossEntropyLoss()
+    ce_loss = nn.CrossEntropyLoss()
+    l1_loss = nn.L1Loss()
+    kl_loss = nn.KLDivLoss()
+    softmax = nn.Softmax()
+    ALPHA = 0.9
+
+    student.train()
+
     #print(training_data[0])
     cum_loss = 0.0
     training_data = list(zip(training_inputs, training_outputs))
@@ -163,25 +106,37 @@ def learn_reward(reward_network, optimizer, training_inputs, training_outputs, n
         np.random.shuffle(training_data)
         training_obs, training_labels = zip(*training_data)
         for i in range(len(training_labels)):
-            traj_i, traj_j = training_obs[i]
+            traj_i, traj_j, human_i, human_j = training_obs[i]
             labels = np.array([training_labels[i]])
             traj_i = np.array(traj_i)
             traj_j = np.array(traj_j)
+            human_i = np.array(human_i)
+            human_j = np.array(human_j)
             traj_i = torch.from_numpy(traj_i).float().to(device)
             traj_j = torch.from_numpy(traj_j).float().to(device)
+            human_i = torch.from_numpy(human_j).float().to(device)
+            human_j = torch.from_numpy(human_j).float().to(device)
             labels = torch.from_numpy(labels).to(device)
 
             #zero out gradient
             optimizer.zero_grad()
 
             #forward + backward + optimize
-            outputs, abs_rewards = reward_network.forward(traj_i, traj_j)
-            #print(outputs[0], outputs[1])
-            #print(labels.item())
-            outputs = outputs.unsqueeze(0)
-            #print("outputs", outputs)
-            #print("labels", labels)
-            loss = loss_criterion(outputs, labels) + l1_reg * abs_rewards
+            t_outputs, t_abs_rewards = teacher.forward(traj_i, traj_j, human_i, human_j)
+            s_outputs, s_abs_rewards = student.forward(traj_i, traj_j)
+
+            t_weight = teacher.distill_weights()
+            s_weight = student.distill_weights()
+
+            t_outputs = t_outputs.unsqueeze(0)
+            s_outputs = s_outputs.unsqueeze(0)
+
+            t_soft = softmax(t_outputs)
+            s_soft = softmax(s_outputs)
+
+            #loss = loss_criterion(outputs, labels) + l1_reg * abs_rewards
+            loss  = (1 - ALPHA) * ce_loss(s_outputs, labels)
+            loss += (ALPHA) * (l1_loss(s_weight, t_weight) + kl_loss(s_soft, t_soft))
             loss.backward()
             optimizer.step()
 
@@ -193,10 +148,8 @@ def learn_reward(reward_network, optimizer, training_inputs, training_outputs, n
                 print("epoch {}:{} loss {}".format(epoch,i, cum_loss))
                 print(f"abs_rewards: {abs_rewards.item()}\n")
                 cum_loss = 0.0
-                torch.save(reward_net.state_dict(), checkpoint_dir)
+                torch.save(student.state_dict(), checkpoint_dir)
     print("finished training")
-
-
 
 
 
@@ -210,7 +163,7 @@ def calc_accuracy(reward_network, training_inputs, training_outputs):
             label = training_outputs[i]
             #print(inputs)
             #print(labels)
-            traj_i, traj_j = training_inputs[i]
+            traj_i, traj_j, human_i, human_j = training_inputs[i]
             traj_i = np.array(traj_i)
             traj_j = np.array(traj_j)
             traj_i = torch.from_numpy(traj_i).float().to(device)
@@ -249,6 +202,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description=None)
     parser.add_argument('--env_name', default='', help='Select the environment name to run, i.e. pong')
     parser.add_argument('--reward_model_path', default='', help="name and location for learned model params")
+    parser.add_argument('-t', '--teacher', default='', help="Name and location for existing teacher model")
     parser.add_argument('--seed', default=0, help="random seed for experiments")
     parser.add_argument('--data_dir', help="where agc data is located, e.g. path to atari_v1/")
 
@@ -323,31 +277,37 @@ if __name__=="__main__":
     print(len(learning_returns))
     print(len(demonstrations))
     print([a[0] for a in zip(learning_returns, demonstrations)])
-    
+
+    # Sorting variant for audio trajectories #1
     demonstrations = [x for _, x in sorted(zip(learning_returns,demonstrations), key=lambda pair: pair[0])]
 
     sorted_returns = sorted(learning_returns)
     print(sorted_returns)
-    training_obs, training_labels = create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env)
+    training_obs, training_labels = create_training_data_prev(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env, human_ann)
     print("num training_obs", len(training_obs))
     print("num_labels", len(training_labels))
     # Now we create a reward network and optimize it using the training data.
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    reward_net = Net()
-    reward_net.to(device)
+    student = StudentNet()
+    teacher = TeacherNet()
+    student.to(device)
+    teacher.to(device)
     import torch.optim as optim
-    optimizer = optim.Adam(reward_net.parameters(),  lr=lr, weight_decay=weight_decay)
-    learn_reward(reward_net, optimizer, training_obs, training_labels, num_iter, l1_reg, args.reward_model_path)
+
+    teacher.load_state_dict(torch.load(args.teacher))
+    teacher.eval()
+    optimizer = optim.Adam(student.parameters(),  lr=lr, weight_decay=weight_decay)
+    learn_reward(teacher, student, optimizer, training_obs, training_labels, num_iter, l1_reg, args.reward_model_path)
     
 
-    torch.save(reward_net.state_dict(), args.reward_model_path)
+    torch.save(student.state_dict(), args.reward_model_path)
 
     with torch.no_grad():
-        pred_returns = [predict_traj_return(reward_net, traj) for traj in demonstrations]
+        pred_returns = [predict_traj_return(student, traj) for traj in demonstrations]
     for i, p in enumerate(pred_returns):
         print(i,p,sorted_returns[i])
 
-    print("accuracy", calc_accuracy(reward_net, training_obs, training_labels))
+    print("accuracy", calc_accuracy(student, training_obs, training_labels))
 
 
     print(f"Total time: {time.time() - start}")

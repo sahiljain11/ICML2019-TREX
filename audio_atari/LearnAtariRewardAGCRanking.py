@@ -15,8 +15,8 @@ from run_test import *
 import os
 
 """
-python LearnAtariRewardAGC.py --env_name mspacman --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/mspacman.params
-python LearnAtariRewardAGC.py --env_name spaceinvaders --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/spaceinvaders0.params --seed 0
+python LearnAtariRewardAGCRanking.py --env_name mspacman --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/mspacman.params
+python LearnAtariRewardAGCRanking.py --env_name spaceinvaders --data_dir /home/sahilj/forked/ICML2019-TREX/audio_atari/frames --reward_model_path ./learned_models/spaceinvaders0.params --seed 0
 """
 
 '''
@@ -27,48 +27,15 @@ OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked
 OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space01 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders0.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
 OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space10 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 0 --num_timesteps=5e7 --save_interval=500 --num_env 9
 OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_space11 python -m baselines.run --alg=ppo2 --env=SpaceInvadersNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/spaceinvaders1.params --seed 1 --num_timesteps=5e7 --save_interval=500 --num_env 9
-
-
-With the 'nice' command so as to not completely hold the computer
-OPENAI_LOG_FORMAT='stdout,log,csv,tensorboard' OPENAI_LOGDIR=/home/sahilj/forked/ICML2019-TREX/tflogs_seaquest12 taskset -c 1-60 nice -n 19 python -m baselines.run --alg=ppo2 --env=SeaquestNoFrameskip-v4 --custom_reward pytorch --custom_reward_path learned_models/seaquest1.params --seed 2 --num_timesteps=5e7 --save_interval=500 --num_env 9
 '''
 
-def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env_name):
+def create_training_data_prev(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env_name):
     #collect training data
     max_traj_length = 0
     training_obs = []
     training_labels = []
     num_demos = len(demonstrations)
 
-    #add full trajs
-    for n in range(num_trajs):
-        ti = 0
-        tj = 0
-        #only add trajectories that are different returns
-        while(ti == tj):
-            #pick two random demonstrations
-            ti = np.random.randint(num_demos)
-            tj = np.random.randint(num_demos)
-        #print(ti, tj)
-        #create random partial trajs by finding random start frame and random skip frame
-        si = np.random.randint(6)
-        sj = np.random.randint(6)
-        step = np.random.randint(3,7)
-        #step_j = np.random.randint(2,6)
-        #print("si,sj,skip",si,sj,step)
-        traj_i = demonstrations[ti][si::step]  #slice(start,stop,step)
-        traj_j = demonstrations[tj][sj::step]
-        #max_traj_length = max(max_traj_length, len(traj_i), len(traj_j))
-        if ti > tj:
-            label = 0
-        else:
-            label = 1
-        #print(label)
-        training_obs.append((traj_i, traj_j))
-        training_labels.append(label)
-        max_traj_length = max(max_traj_length, len(traj_i), len(traj_j))
-
-  
     #fixed size snippets with progress prior
     for n in range(num_snippets):
         ti = 0
@@ -100,6 +67,87 @@ def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_le
             label = 0
         else:
             label = 1
+        training_obs.append((traj_i, traj_j))
+        training_labels.append(label)
+
+    print("maximum traj length", max_traj_length)
+    return training_obs, training_labels
+
+def create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env_name, human_ann, random_ranking):
+    #collect training data
+    max_traj_length = 0
+    training_obs = []
+    training_labels = []
+    num_demos = len(demonstrations)
+
+    #fixed size snippets with progress prior
+    for n in range(num_snippets):
+        ti = 0
+        tj = 0
+        #only add trajectories that are different returns
+        while ti == tj:
+            #pick two random demonstrations
+            ti = np.random.randint(num_demos)
+            tj = np.random.randint(num_demos)
+        #print(ti, tj)
+        #create random snippets
+        #find min length of both demos to ensure we can pick a demo no earlier than that chosen in worse preferred demo
+        min_length = min(len(demonstrations[ti]), len(demonstrations[tj]))
+        rand_length = np.random.randint(min_snippet_length, max_snippet_length)
+
+        mid_i = np.random.randint(min_length)
+        mid_j = np.random.randint(min_length)
+
+        while human_ann[ti][mid_i]['word'] == None:
+            mid_i = np.random.randint(min_length)
+
+        while human_ann[tj][mid_j]['word'] == None:
+            mid_j = np.random.randint(min_length)
+        
+        ti_start = int(max(0, mid_i - (rand_length / 2)))
+        tj_start = int(max(0, mid_j - (rand_length / 2)))
+        ti_end   = int(min(len(demonstrations[ti]), mid_i + (rand_length / 2)))
+        tj_end   = int(min(len(demonstrations[tj]), mid_j + (rand_length / 2)))
+
+        # compute the number of yes and nos
+        ann_i = human_ann[ti][ti_start:ti_end] #skip everyother framestack to reduce size
+        ann_j = human_ann[tj][tj_start:tj_end]
+
+        score_i = 0
+        score_j = 0
+        for l in ann_i:
+            if l['word'] == 'yes' and l['conf'] > 0.0:
+                score_i += 1
+            if l['word'] == 'no'  and l['conf'] > 0.0:
+                score_i -= 1
+
+        for l in ann_j:
+            if l['word'] == 'yes' and l['conf'] > 0.0:
+                score_j += 1
+            if l['word'] == 'no'  and l['conf'] > 0.0:
+                score_j -= 1
+
+        # compute this separately after duration 
+        traj_i = demonstrations[ti][ti_start:ti_end:2] #skip everyother framestack to reduce size
+        traj_j = demonstrations[tj][tj_start:tj_end:2]
+    
+        max_traj_length = max(max_traj_length, len(traj_i), len(traj_j))
+
+        # compute reward on just seed 0. PPO on seed 0,1,2
+
+        # yes minus no duration
+        # 10s of yes minus 5s of yes
+        if score_i > score_j:
+            label = 0
+        else:
+            label = 1
+
+        if random_ranking:
+            if np.random.rand(1)[0] > 0.5:
+                label = 1
+            else:
+                label = 0
+
         training_obs.append((traj_i, traj_j))
         training_labels.append(label)
 
@@ -251,6 +299,7 @@ if __name__=="__main__":
     parser.add_argument('--reward_model_path', default='', help="name and location for learned model params")
     parser.add_argument('--seed', default=0, help="random seed for experiments")
     parser.add_argument('--data_dir', help="where agc data is located, e.g. path to atari_v1/")
+    parser.add_argument('-v', '--variation', default=0, type=int, help="Whether or not to sort the variations prior to rankings or during create_training_data (0,1)")
 
     args = parser.parse_args()
     env_name = args.env_name
@@ -280,6 +329,9 @@ if __name__=="__main__":
         sys.exit(1)
     print("trajectory path: " + str(args.data_dir + "/trajectories"))
     print("path existence:  " + str(os.path.exists(args.data_dir + "/trajectories")))
+
+    if args.variation != 0 and args.variation != 1 and args.variation != 2:
+        raise Exception("Variation not allowed")
 
     env_type = "atari"
     print(env_type)
@@ -323,12 +375,27 @@ if __name__=="__main__":
     print(len(learning_returns))
     print(len(demonstrations))
     print([a[0] for a in zip(learning_returns, demonstrations)])
-    
-    demonstrations = [x for _, x in sorted(zip(learning_returns,demonstrations), key=lambda pair: pair[0])]
+
+    # Sorting variant for audio trajectories #1
+    if args.variation == 0:
+        number_of_ann = [0] * len(demonstrations)
+        for i in range(len(demonstrations)):
+            traj = human_ann[i]
+            for l in traj:
+                if l['word'] == 'yes' and l['conf'] > 0.0:
+                    number_of_ann[i] += 1
+                if l['word'] == 'no' and l['conf'] > 0.0:
+                    number_of_ann[i] -= 1
+        demonstrations = [x for _, x in sorted(zip(number_of_ann, demonstrations), key=lambda pair: pair[0])]
+    else:
+        demonstrations = [x for _, x in sorted(zip(learning_returns,demonstrations), key=lambda pair: pair[0])]
 
     sorted_returns = sorted(learning_returns)
     print(sorted_returns)
-    training_obs, training_labels = create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env)
+    if args.variation == 0:
+        training_obs, training_labels = create_training_data_prev(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env)
+    else:
+        training_obs, training_labels = create_training_data(demonstrations, num_trajs, num_snippets, min_snippet_length, max_snippet_length, env, human_ann, args.variation == 2)
     print("num training_obs", len(training_obs))
     print("num_labels", len(training_labels))
     # Now we create a reward network and optimize it using the training data.
